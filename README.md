@@ -19,4 +19,4 @@ Read in this order:
 
 ## Next
 
-Phase 0 scaffold (Next.js 15 web, FastAPI backend, Postgres, Redis, Dockerfiles, CI, Fly.io deploy) lands in a follow-up PR. See `PRODUCT_PLAN.md` § Phased Roadmap.
+Phase 0 scaffold (Next.js 15 web, FastAPI backend, Postgres, Redis, Dockerfiles, CI) lands in a follow-up PR. See `PRODUCT_PLAN.md` § Phased Roadmap. Deployment target is undecided; the stack is container-based and portable across hosts.
