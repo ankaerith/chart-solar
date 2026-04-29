@@ -76,12 +76,13 @@ def apply_clipping(
     if not 0.0 < inverter_efficiency <= 1.0:
         raise ValueError("inverter_efficiency must be in (0, 1]")
 
+    if any(dc < 0.0 for dc in hourly_dc_kw):
+        raise ValueError("hourly_dc_kw entries must be >= 0")
+
     hourly_ac_kw: list[float] = []
     clipped_hours = 0
     clipping_loss_kwh = 0.0
     for dc_kw in hourly_dc_kw:
-        if dc_kw < 0.0:
-            raise ValueError("hourly_dc_kw entries must be >= 0")
         unclipped_ac = dc_kw * inverter_efficiency
         if unclipped_ac > inverter_ac_kw:
             ac_kw = inverter_ac_kw
@@ -92,7 +93,7 @@ def apply_clipping(
         hourly_ac_kw.append(ac_kw)
 
     if dc_kw_nameplate is None:
-        dc_kw_nameplate = max(hourly_dc_kw) if hourly_dc_kw else 0.0
+        dc_kw_nameplate = max(hourly_dc_kw)
     if dc_kw_nameplate <= 0:
         raise ValueError("dc_kw_nameplate must be > 0 when provided")
     dc_ac_ratio = dc_kw_nameplate / inverter_ac_kw
