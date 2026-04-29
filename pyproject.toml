@@ -37,6 +37,11 @@ select = ["E", "F", "I", "B", "UP", "N", "W"]
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.params.Depends"]
 
+[tool.ruff.lint.isort]
+# `alembic/` is the migrations directory in this repo; the `alembic` PyPI
+# package is unrelated. Mark it third-party so isort groups it with sqlalchemy.
+known-third-party = ["alembic"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["backend/tests"]

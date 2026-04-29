@@ -133,6 +133,29 @@ frontend/
 - Every long job: enqueued, status pollable, dead-letter after N retries.
 - Every secret: in env, never in code; rotation cadence per `chart-solar-7wxq`.
 
+## Database migrations
+
+Alembic owns the schema. The migrations directory is at the repo root: `alembic/versions/`. The `alembic` config (`alembic.ini`) and env (`alembic/env.py`) are wired to `backend.config.settings.database_url` so a single `DATABASE_URL` env var drives both the API and the migration runner.
+
+**Local workflow:**
+
+```bash
+docker compose up -d postgres                 # bring up Postgres on :5432
+uv run alembic upgrade head                   # apply all migrations
+uv run alembic revision -m "add audits table" # create new migration (empty)
+uv run alembic revision --autogenerate -m "…" # diff models vs DB and stub the migration
+uv run alembic downgrade -1                   # roll back one revision
+```
+
+**Conventions:**
+
+- One migration per logical schema delta. Don't bundle unrelated tables.
+- Migrations are **append-only**. Never edit an applied revision — supersede with a new one.
+- `--autogenerate` is a starting point, not the final answer. Always read the generated SQL, hand-tune indexes / constraints / data backfills, and confirm the `downgrade()` is real (autogenerate often leaves it incomplete).
+- Every migration has both `upgrade()` and `downgrade()`. The CI alembic round-trip step (`upgrade head → downgrade base → upgrade head`) catches asymmetry.
+- Models land in Phase 1 (`backend/<package>/models.py`); when they do, wire `target_metadata` in `alembic/env.py` so autogenerate sees them.
+- Phase 1 tables (audits, installer_quotes, installers, user_pii_vault, region_pricing_aggregates, installer_internal_stats — see `chart-solar-0hl`) chain off the empty baseline `c6cb527d3505`.
+
 ## Architecture decisions
 
 See [docs/adr/](./adr/). Anything that fits the "future reader will be surprised" test gets an ADR.
