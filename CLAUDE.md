@@ -56,9 +56,16 @@ bd close <id>         # Complete work
 - **Engineering spec**: [`PRODUCT_PLAN.md`](PRODUCT_PLAN.md) — features, architecture, phased roadmap, verification.
 - **Legal**: [`LEGAL_CONSIDERATIONS.md`](LEGAL_CONSIDERATIONS.md) — data sources, IP, AUP, retention.
 - **Engineering practices**: [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — Definition of Done, repo layout, testing, ops.
+- **Secret management**: [`docs/SECRETS.md`](docs/SECRETS.md) — env vars, rotation cadence, deploy targets.
 - **Architecture decisions**: [`docs/adr/`](docs/adr/) — read the index in `README.md`. Don't edit accepted ADRs in place; supersede.
 - **PR checklist**: [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 - **Tasks + memory**: `bd ready`, `bd show <id>`, `bd memories <keyword>`.
+
+## Beads conventions
+
+- **Validation**: `validation.on-create=warn` — bd warns on missing fields but doesn't block creation.
+- **Labels**: every issue gets a `phase:*` (one of `phase:0`, `phase:1a`, `phase:1b`, `phase:2`, `phase:3a`, `phase:3b`, `phase:4`, `phase:5`) and an `area:*` (`area:engine`, `area:data`, `area:ui`, `area:ops`, `area:legal`, `area:pdf`, `area:qa`). `bd label list-all` shows current usage.
+- **Hooks**: pre-commit + pre-push run `bd hooks run …` (export JSONL + dolt sync). The pre-commit framework's `.pre-commit-config.yaml` invokes the same beads hook so they coexist with ruff / mypy / eslint / gitleaks / pip-licenses.
 
 ## Architecture in one paragraph
 
