@@ -22,10 +22,6 @@ from backend.entitlements.features import (
 from backend.entitlements.guards import current_tier, require_feature
 from backend.main import app as production_app
 
-# ---------------------------------------------------------------------------
-# Registry semantics
-# ---------------------------------------------------------------------------
-
 
 def test_features_registered() -> None:
     assert FEATURES["engine.basic_forecast"] is Tier.FREE
@@ -62,11 +58,6 @@ def test_unknown_feature_key_raises_at_decoration() -> None:
         feature_required_tier("nope.does_not_exist")
     with pytest.raises(KeyError):
         require_feature("nope.does_not_exist")
-
-
-# ---------------------------------------------------------------------------
-# FastAPI guard — dependency override seam
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -151,11 +142,6 @@ def test_founders_alias_can_hit_decision_pack_route(
 def test_default_current_tier_is_free() -> None:
     """No override → default tier (Phase 2 wires this to auth)."""
     assert current_tier() == Tier.FREE
-
-
-# ---------------------------------------------------------------------------
-# Registry HTTP endpoint (frontend `useEntitlement` mirror source)
-# ---------------------------------------------------------------------------
 
 
 def test_registry_endpoint_returns_full_table() -> None:

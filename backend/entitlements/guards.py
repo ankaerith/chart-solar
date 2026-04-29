@@ -15,12 +15,8 @@ from backend.entitlements.features import Tier, feature_required_tier, tier_sati
 
 
 def current_tier() -> Tier:
-    """Default user tier when no auth is wired up.
-
-    Phase 2 replaces this with the authenticated user's tier (read from
-    JWT or session). Tests override via FastAPI's
-    `app.dependency_overrides[current_tier] = lambda: Tier.TRACK`.
-    """
+    """Default user tier — overridable via `app.dependency_overrides`
+    for tests, and replaced by the auth-bound user once Phase 2 ships."""
     return Tier.FREE
 
 
