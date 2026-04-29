@@ -141,8 +141,8 @@ def test_nbt_negative_acc_during_midday_glut_reduces_credit() -> None:
     """CPUC ACC occasionally dips negative during spring-glut hours;
     homeowner pays for export in those hours under NBT.
 
-    Construct a scenario with zero credit in 8758 hours and
-    -$0.01/kWh in 2 hours — net credit equals zero, not negative."""
+    Result preserves the signed total — the caller decides whether
+    to floor at zero before rendering a "$" number."""
     export = [1.0] * HOURS_PER_TMY
     acc = [0.0] * HOURS_PER_TMY
     acc[100] = -0.01
@@ -151,10 +151,8 @@ def test_nbt_negative_acc_during_midday_glut_reduces_credit() -> None:
         hourly_export_kwh=export,
         hourly_avoided_cost_per_kwh=acc,
     )
-    # Annual credit floors at zero (won't go negative on the report).
-    assert result.annual_credit == pytest.approx(0.0)
-    # But monthly_credit captures the actual signed value for diagnostics.
     assert result.monthly_credit[0] == pytest.approx(-0.02, abs=1e-9)
+    assert result.annual_credit == pytest.approx(-0.02, abs=1e-9)
 
 
 def test_nbt_misaligned_inputs_rejected() -> None:

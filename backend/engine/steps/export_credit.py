@@ -14,13 +14,11 @@ kWh is worth back to the homeowner:
   retail. Drops residential payback by years.
 * **UK SEG (Smart Export Guarantee)** — supplier-set rate (Octopus
   Outgoing ~15p/kWh, E.ON Next ~3p, etc.). Most are flat; some have
-  TOU variants. We model the flat rate here; TOU SEG is the same
-  shape as NBT (an hourly rate vector).
+  TOU variants. The TOU shape is identical to NBT.
 
-This step is pure-math. The hourly avoided-cost vector for NBT is the
-job of chart-solar-ma7 (CPUC ACC ingest); this module just consumes
-it. Likewise the SEG rate registry (per-supplier defaults) is part of
-the data layer (chart-solar-ltx).
+This step is pure-math. The hourly avoided-cost vector for NBT and
+the SEG supplier rate registry are part of the data layer; this
+module just consumes them.
 """
 
 from __future__ import annotations
@@ -37,19 +35,30 @@ HOURS_PER_TMY = 8760
 ExportRegime = Literal["nem_one_for_one", "nem_three_nbt", "seg_flat", "seg_tou"]
 
 
+def _build_tmy_calendar() -> tuple[tuple[int, bool, int], ...]:
+    base = datetime(2023, 1, 1, 0, tzinfo=UTC)
+    return tuple(
+        (when.month, when.weekday() < 5, when.hour)
+        for when in (base + timedelta(hours=i) for i in range(HOURS_PER_TMY))
+    )
+
+
+_TMY_CALENDAR: tuple[tuple[int, bool, int], ...] = _build_tmy_calendar()
+
+
 class ExportCreditResult(BaseModel):
-    """Per-month + annual export-credit dollar amounts."""
+    """Per-month + annual export-credit dollar amounts.
+
+    ``monthly_credit`` entries can go negative under NBT / SEG-TOU when
+    the rate vector dips below zero (CPUC's spring-glut hours).
+    ``annual_credit`` is also signed — callers that want a bill-impact
+    number can floor at zero themselves.
+    """
 
     regime: ExportRegime
     monthly_credit: list[float] = Field(..., min_length=12, max_length=12)
-    annual_credit: float = Field(..., ge=0.0)
+    annual_credit: float
     annual_kwh_exported: float = Field(..., ge=0.0)
-
-
-def _hour_to_month(hour_index: int, *, year: int = 2023) -> int:
-    """0..8759 → 1..12 month index (year 2023 = non-leap, aligns w/ TmyData)."""
-    base = datetime(year, 1, 1, 0, tzinfo=UTC)
-    return (base + timedelta(hours=hour_index)).month
 
 
 def _validate_hourly(hourly: list[float], *, name: str) -> None:
@@ -59,6 +68,41 @@ def _validate_hourly(hourly: list[float], *, name: str) -> None:
         )
 
 
+def _matching_tou_rate(
+    *,
+    periods: list[TouPeriod],
+    month: int,
+    is_weekday: bool,
+    hour_of_day: int,
+) -> float | None:
+    for period in periods:
+        if month not in period.months:
+            continue
+        if period.is_weekday is not is_weekday:
+            continue
+        if period.hour_mask[hour_of_day]:
+            return period.rate_per_kwh
+    return None
+
+
+def _accumulate_monthly_credits(
+    hourly_export_kwh: list[float],
+    rate_for_hour: list[float],
+) -> tuple[list[float], float]:
+    """Walk the export stream once, accumulating per-month credit and
+    total exported kWh. Caller passes a same-length list of per-hour
+    rates."""
+    monthly = [0.0] * 12
+    total_kwh = 0.0
+    for hour_index, export_kwh in enumerate(hourly_export_kwh):
+        kwh = max(0.0, export_kwh)
+        if kwh == 0.0:
+            continue
+        monthly[_TMY_CALENDAR[hour_index][0] - 1] += kwh * rate_for_hour[hour_index]
+        total_kwh += kwh
+    return monthly, total_kwh
+
+
 def apply_nem_three_nbt(
     *,
     hourly_export_kwh: list[float],
@@ -66,31 +110,20 @@ def apply_nem_three_nbt(
 ) -> ExportCreditResult:
     """Credit each hour of export at the CPUC ACC vector's matching hour.
 
-    Both arrays must be 8760 entries. Negative export entries are
-    clamped at zero (defense against caller passing signed net load).
-    Negative ACC values *are* allowed — CPUC's vector occasionally
-    dips negative during midday glut, and the homeowner does pay for
-    exporting in those hours under NBT (yes, really).
+    Both arrays must be 8760 entries. Negative ACC values *are* allowed
+    — CPUC's vector occasionally dips negative during midday glut, and
+    the homeowner does pay for exporting in those hours under NBT (yes,
+    really).
     """
     _validate_hourly(hourly_export_kwh, name="hourly_export_kwh")
     _validate_hourly(hourly_avoided_cost_per_kwh, name="hourly_avoided_cost_per_kwh")
-
-    monthly = [0.0] * 12
-    total_kwh = 0.0
-    for hour_index, (export_kwh, rate) in enumerate(
-        zip(hourly_export_kwh, hourly_avoided_cost_per_kwh, strict=True)
-    ):
-        kwh = max(0.0, export_kwh)
-        if kwh == 0.0:
-            continue
-        month = _hour_to_month(hour_index)
-        monthly[month - 1] += kwh * rate
-        total_kwh += kwh
-
+    monthly, total_kwh = _accumulate_monthly_credits(
+        hourly_export_kwh, hourly_avoided_cost_per_kwh
+    )
     return ExportCreditResult(
         regime="nem_three_nbt",
         monthly_credit=monthly,
-        annual_credit=max(0.0, sum(monthly)),
+        annual_credit=sum(monthly),
         annual_kwh_exported=total_kwh,
     )
 
@@ -100,22 +133,14 @@ def apply_seg_flat(
     hourly_export_kwh: list[float],
     rate_per_kwh: float,
 ) -> ExportCreditResult:
-    """UK SEG with a single flat rate (Octopus Outgoing flat, E.ON
-    Next, etc.). Octopus's TOU SEG goes through ``apply_seg_tou``."""
+    """UK SEG with a single flat rate (Octopus Outgoing flat, E.ON Next,
+    etc.). Octopus's TOU SEG goes through ``apply_seg_tou``."""
     _validate_hourly(hourly_export_kwh, name="hourly_export_kwh")
     if rate_per_kwh < 0:
         raise ValueError("rate_per_kwh must be >= 0")
-
-    monthly = [0.0] * 12
-    total_kwh = 0.0
-    for hour_index, export_kwh in enumerate(hourly_export_kwh):
-        kwh = max(0.0, export_kwh)
-        if kwh == 0.0:
-            continue
-        month = _hour_to_month(hour_index)
-        monthly[month - 1] += kwh * rate_per_kwh
-        total_kwh += kwh
-
+    monthly, total_kwh = _accumulate_monthly_credits(
+        hourly_export_kwh, [rate_per_kwh] * HOURS_PER_TMY
+    )
     return ExportCreditResult(
         regime="seg_flat",
         monthly_credit=monthly,
@@ -138,48 +163,52 @@ def apply_seg_tou(
     """
     _validate_hourly(hourly_export_kwh, name="hourly_export_kwh")
     _validate_hourly(hourly_rate_per_kwh, name="hourly_rate_per_kwh")
-
-    monthly = [0.0] * 12
-    total_kwh = 0.0
-    for hour_index, (export_kwh, rate) in enumerate(
-        zip(hourly_export_kwh, hourly_rate_per_kwh, strict=True)
-    ):
-        kwh = max(0.0, export_kwh)
-        if kwh == 0.0:
-            continue
-        month = _hour_to_month(hour_index)
-        monthly[month - 1] += kwh * rate
-        total_kwh += kwh
-
+    monthly, total_kwh = _accumulate_monthly_credits(
+        hourly_export_kwh, hourly_rate_per_kwh
+    )
     return ExportCreditResult(
         regime="seg_tou",
         monthly_credit=monthly,
-        annual_credit=max(0.0, sum(monthly)),
+        annual_credit=sum(monthly),
         annual_kwh_exported=total_kwh,
     )
 
 
-def _matching_tou_rate(
+def _resolve_nem_one_rate(
     *,
-    periods: list[TouPeriod],
+    tariff: TariffSchedule,
     month: int,
     is_weekday: bool,
     hour_of_day: int,
-) -> float | None:
-    for period in periods:
-        if month not in period.months:
-            continue
-        if period.is_weekday is not is_weekday:
-            continue
-        if period.hour_mask[hour_of_day]:
-            return period.rate_per_kwh
-    return None
-
-
-def _hour_calendar(hour_index: int, *, year: int = 2023) -> tuple[int, bool, int]:
-    base = datetime(year, 1, 1, 0, tzinfo=UTC)
-    when = base + timedelta(hours=hour_index)
-    return when.month, when.weekday() < 5, when.hour
+    hour_index: int,
+) -> float:
+    """The hour's marginal retail rate under NEM 1:1: the rate the
+    homeowner would have paid had they imported instead of exported."""
+    if tariff.structure == "flat":
+        return tariff.flat_rate_per_kwh or 0.0
+    if tariff.structure == "tou":
+        if not tariff.tou_periods:
+            raise ValueError("tou tariff requires tou_periods")
+        matched = _matching_tou_rate(
+            periods=tariff.tou_periods,
+            month=month,
+            is_weekday=is_weekday,
+            hour_of_day=hour_of_day,
+        )
+        if matched is None:
+            raise ValueError(
+                f"NEM 1:1 needs a TOU rate at hour_index={hour_index} "
+                f"(month={month}, weekday={is_weekday}, hour={hour_of_day}) "
+                "but no period matched — check tariff coverage"
+            )
+        return matched
+    if tariff.structure == "tiered":
+        if not tariff.tiered_blocks:
+            raise ValueError("tiered tariff requires tiered_blocks")
+        # Conservative upper bound — the marginal $/kWh saved by
+        # avoiding an import is the top tier's rate.
+        return max(b.rate_per_kwh for b in tariff.tiered_blocks)
+    raise ValueError(f"unknown tariff structure: {tariff.structure!r}")
 
 
 def apply_nem_one_for_one(
@@ -189,13 +218,9 @@ def apply_nem_one_for_one(
 ) -> ExportCreditResult:
     """NEM 1:1 retail-rate net metering.
 
-    Each exported kWh credits at *the rate it would have cost to
-    import in that hour*. For flat tariffs that's the single
-    flat_rate_per_kwh; for TOU tariffs it's the band's rate. Tiered
-    NEM 1:1 is unusual in practice — the credit reduces the
-    customer's net consumption before tier walking — so we credit at
-    the highest tier rate as a conservative upper bound (i.e. the
-    homeowner's marginal $/kWh saved by avoiding import).
+    Each exported kWh credits at the rate it would have cost to import
+    in that hour. Tiered NEM 1:1 credits at the top tier's rate — the
+    conservative upper bound on the homeowner's marginal saving.
     """
     _validate_hourly(hourly_export_kwh, name="hourly_export_kwh")
 
@@ -205,32 +230,16 @@ def apply_nem_one_for_one(
         kwh = max(0.0, export_kwh)
         if kwh == 0.0:
             continue
-        month, is_weekday, hour_of_day = _hour_calendar(hour_index)
-        if tariff.structure == "flat":
-            rate = tariff.flat_rate_per_kwh or 0.0
-        elif tariff.structure == "tou":
-            assert tariff.tou_periods is not None
-            matched = _matching_tou_rate(
-                periods=tariff.tou_periods,
-                month=month,
-                is_weekday=is_weekday,
-                hour_of_day=hour_of_day,
-            )
-            if matched is None:
-                raise ValueError(
-                    f"NEM 1:1 needs a TOU rate at hour_index={hour_index} "
-                    f"(month={month}, weekday={is_weekday}, hour={hour_of_day}) "
-                    "but no period matched — check tariff coverage"
-                )
-            rate = matched
-        elif tariff.structure == "tiered":
-            assert tariff.tiered_blocks
-            rate = max(b.rate_per_kwh for b in tariff.tiered_blocks)
-        else:
-            raise ValueError(f"unknown tariff structure: {tariff.structure!r}")
+        month, is_weekday, hour_of_day = _TMY_CALENDAR[hour_index]
+        rate = _resolve_nem_one_rate(
+            tariff=tariff,
+            month=month,
+            is_weekday=is_weekday,
+            hour_of_day=hour_of_day,
+            hour_index=hour_index,
+        )
         monthly[month - 1] += kwh * rate
         total_kwh += kwh
-
     return ExportCreditResult(
         regime="nem_one_for_one",
         monthly_credit=monthly,
