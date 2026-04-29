@@ -29,23 +29,53 @@ ClimateBand = Literal["temperate", "arid", "tropical"]
 #: 12-month derate factors (Jan..Dec) for a typical *temperate* climate
 #: with regular rainfall. Derived from NREL field-study median.
 TEMPERATE_FACTORS: tuple[float, ...] = (
-    0.99, 0.985, 0.985, 0.99, 0.99, 0.985,
-    0.98, 0.975, 0.98, 0.985, 0.99, 0.99,
+    0.99,
+    0.985,
+    0.985,
+    0.99,
+    0.99,
+    0.985,
+    0.98,
+    0.975,
+    0.98,
+    0.985,
+    0.99,
+    0.99,
 )
 
 #: Arid climate (CA Central Valley, Phoenix, Las Vegas). Long dry
 #: summers compound dust → 5-8 % loss in shoulder months, partial
 #: recovery in winter rains. Empirical envelope from Mejia & Kleissl.
 ARID_FACTORS: tuple[float, ...] = (
-    0.98, 0.97, 0.96, 0.95, 0.93, 0.92,
-    0.91, 0.92, 0.93, 0.95, 0.97, 0.98,
+    0.98,
+    0.97,
+    0.96,
+    0.95,
+    0.93,
+    0.92,
+    0.91,
+    0.92,
+    0.93,
+    0.95,
+    0.97,
+    0.98,
 )
 
 #: Tropical climate — frequent rain washes panels naturally; pollen +
 #: organic film are the dominant losses but recovery is fast.
 TROPICAL_FACTORS: tuple[float, ...] = (
-    0.99, 0.99, 0.99, 0.99, 0.99, 0.99,
-    0.99, 0.99, 0.99, 0.99, 0.99, 0.99,
+    0.99,
+    0.99,
+    0.99,
+    0.99,
+    0.99,
+    0.99,
+    0.99,
+    0.99,
+    0.99,
+    0.99,
+    0.99,
+    0.99,
 )
 
 CLIMATE_BAND_FACTORS: dict[ClimateBand, tuple[float, ...]] = {
@@ -113,8 +143,18 @@ def apply_monthly_soiling(
     hourly_kwh: list[float],
     curve: SoilingCurve,
     hours_per_month: tuple[int, ...] = (
-        744, 672, 744, 720, 744, 720,
-        744, 744, 720, 744, 720, 744,
+        744,
+        672,
+        744,
+        720,
+        744,
+        720,
+        744,
+        744,
+        720,
+        744,
+        720,
+        744,
     ),
 ) -> list[float]:
     """Project the 12-month curve onto an hourly array.
