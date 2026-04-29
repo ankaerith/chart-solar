@@ -6,7 +6,7 @@ Independent forecasting, proposal auditing, and post-install variance tracking f
 
 ## Repo status
 
-Phase 0: planning artifacts only. No code yet.
+Phase 0: scaffold. Next.js + FastAPI + Postgres + Redis boot from `docker compose up`; the engine is wired but pipeline steps are pass-through.
 
 ## Planning artifacts
 
@@ -25,9 +25,12 @@ docker compose up                                       # postgres + redis + api
 uv sync && uv run uvicorn backend.main:app --reload     # API only, on :8000
 cd frontend && bun install && bun run dev               # Web only, on :3000
 uv run pytest                                           # Backend tests
+uv run pre-commit install                               # Local quality gate (one-time)
 ```
 
 API at http://localhost:8000/api/health · Web at http://localhost:3000
+
+Configuration lives in `.env` (see [`docs/SECRETS.md`](docs/SECRETS.md) for production secret-management).
 
 ## Engineering docs
 

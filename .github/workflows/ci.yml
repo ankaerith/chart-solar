@@ -22,6 +22,15 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
@@ -32,6 +41,8 @@ jobs:
       - run: uv run ruff format --check
       - run: uv run mypy backend
       - run: uv run pytest
+      - name: pip-licenses (block AGPL / SSPL / Commons Clause)
+        run: uv run pip-licenses --fail-on "AGPL-3.0;AGPL-3.0-only;AGPL-3.0-or-later;SSPL-1.0;Commons Clause"
       - name: Alembic round-trip (upgrade head → downgrade base → upgrade head)
         run: |
           uv run alembic upgrade head
@@ -52,3 +63,13 @@ jobs:
       - run: bun run lint
       - run: bun run typecheck
       - run: bun run build
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
