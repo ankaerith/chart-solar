@@ -60,12 +60,8 @@ def test_seattle_clearsky_year_lower_than_phoenix() -> None:
     measurably less per-kW yield because the sun rides lower."""
     seattle = _system(lat=47.6062, lon=-122.3321)
     phoenix = _system(lat=33.4484, lon=-112.0740)
-    seattle_tmy = synthetic_tmy(
-        lat=seattle.lat, lon=seattle.lon, timezone="America/Los_Angeles"
-    )
-    phoenix_tmy = synthetic_tmy(
-        lat=phoenix.lat, lon=phoenix.lon, timezone="America/Phoenix"
-    )
+    seattle_tmy = synthetic_tmy(lat=seattle.lat, lon=seattle.lon, timezone="America/Los_Angeles")
+    phoenix_tmy = synthetic_tmy(lat=phoenix.lat, lon=phoenix.lon, timezone="America/Phoenix")
     seattle_result = run_dc_production(system=seattle, tmy=seattle_tmy)
     phoenix_result = run_dc_production(system=phoenix, tmy=phoenix_tmy)
     assert seattle_result.annual_ac_kwh < phoenix_result.annual_ac_kwh
@@ -171,9 +167,7 @@ def test_hourly_ac_never_exceeds_peak() -> None:
 def test_temperature_derate_lowers_output() -> None:
     """A more negative ``gamma_pdc`` (steeper temp coefficient) drops
     annual production for a hot site — verifies cell-temp is wired in."""
-    hot_tmy = synthetic_tmy(
-        lat=33.4484, lon=-112.0740, timezone="America/Phoenix", temp_air_c=40.0
-    )
+    hot_tmy = synthetic_tmy(lat=33.4484, lon=-112.0740, timezone="America/Phoenix", temp_air_c=40.0)
     base = run_dc_production(system=_system(), tmy=hot_tmy, gamma_pdc=-0.003)
     steeper = run_dc_production(system=_system(), tmy=hot_tmy, gamma_pdc=-0.005)
     assert steeper.annual_ac_kwh < base.annual_ac_kwh
