@@ -17,6 +17,8 @@ dependencies = [
     "numpy>=2.4",
     "pandas>=3.0",
     "httpx>=0.28",
+    "structlog>=25.5",
+    "sentry-sdk[fastapi]>=2.45",
 ]
 
 [dependency-groups]
