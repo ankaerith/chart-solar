@@ -37,6 +37,21 @@ from backend.providers.tariff import (
 HOURS_PER_TMY = 8760
 
 
+def _build_tmy_calendar() -> tuple[tuple[int, bool, int], ...]:
+    """Precomputed (month, is_weekday, hour_of_day) for each of the 8760
+    hours of a 2023 non-leap year, anchored to UTC. Same anchor as
+    TmyData. Built once at import — saves one datetime allocation per
+    hour per billing call (8760× × multiple passes per Monte Carlo)."""
+    base = datetime(2023, 1, 1, 0, tzinfo=UTC)
+    return tuple(
+        (when.month, when.weekday() < 5, when.hour)
+        for when in (base + timedelta(hours=i) for i in range(HOURS_PER_TMY))
+    )
+
+
+_TMY_CALENDAR: tuple[tuple[int, bool, int], ...] = _build_tmy_calendar()
+
+
 class MonthlyBill(BaseModel):
     """One month's energy + fixed charge breakdown."""
 
@@ -56,20 +71,6 @@ class AnnualBill(BaseModel):
     annual_energy_charge: float = Field(..., ge=0.0)
     annual_fixed_charge: float = Field(..., ge=0.0)
     annual_total: float = Field(..., ge=0.0)
-
-
-def _hour_to_calendar(
-    hour_index: int,
-    *,
-    year: int = 2023,
-) -> tuple[int, bool, int]:
-    """Map a 0..8759 hour index to (month_1_indexed, is_weekday, hour_of_day).
-
-    Year 2023 is a non-leap year so the index lines up with TmyData.
-    """
-    base = datetime(year, 1, 1, 0, tzinfo=UTC)
-    when = base + timedelta(hours=hour_index)
-    return when.month, when.weekday() < 5, when.hour
 
 
 def _matching_tou_period(
@@ -93,84 +94,84 @@ def _matching_tou_period(
     return None
 
 
-def _bill_flat(*, hourly_import_kwh: list[float], rate_per_kwh: float) -> list[float]:
-    """Per-month energy charges for a flat-rate tariff."""
+def _bill_flat(
+    *, hourly_import_kwh: list[float], rate_per_kwh: float
+) -> tuple[list[float], list[float]]:
+    """Per-month (energy_charge, kwh_imported) for a flat-rate tariff."""
     monthly_energy = [0.0] * 12
+    monthly_kwh = [0.0] * 12
     for hour_index, kwh in enumerate(hourly_import_kwh):
-        month, _, _ = _hour_to_calendar(hour_index)
-        monthly_energy[month - 1] += kwh * rate_per_kwh
-    return monthly_energy
+        month_idx = _TMY_CALENDAR[hour_index][0] - 1
+        monthly_kwh[month_idx] += kwh
+        monthly_energy[month_idx] += kwh * rate_per_kwh
+    return monthly_energy, monthly_kwh
 
 
 def _bill_tiered(
     *,
     hourly_import_kwh: list[float],
     tariff: TariffSchedule,
-) -> list[float]:
-    """Per-month energy charges for a tiered tariff.
+) -> tuple[list[float], list[float]]:
+    """Per-month (energy_charge, kwh_imported) for a tiered tariff.
 
     Walks the hourly stream tracking month-to-date kWh; when a tier's
     threshold is crossed mid-hour, splits the kWh across the two
     tiers proportionally. The catch-all (no ``up_to_kwh_per_month``)
-    handles everything above the last threshold.
+    sorts last via the `inf` key.
     """
     blocks = tariff.tiered_blocks
     if not blocks:
         raise ValueError("tiered tariff requires tiered_blocks")
 
-    # Sort blocks by threshold so we can walk them in order; the
-    # catch-all (None threshold) goes last by virtue of `inf` sort key.
     sorted_blocks = sorted(
         blocks,
         key=lambda b: b.up_to_kwh_per_month if b.up_to_kwh_per_month is not None else float("inf"),
     )
 
     monthly_energy = [0.0] * 12
-    monthly_kwh_so_far = [0.0] * 12
+    monthly_kwh = [0.0] * 12
 
     for hour_index, kwh in enumerate(hourly_import_kwh):
         if kwh <= 0:
             continue
-        month, _, _ = _hour_to_calendar(hour_index)
-        cursor = monthly_kwh_so_far[month - 1]
+        month_idx = _TMY_CALENDAR[hour_index][0] - 1
+        monthly_kwh[month_idx] += kwh
+        cursor = monthly_kwh[month_idx] - kwh
         remaining = kwh
         for block in sorted_blocks:
             if remaining <= 0:
                 break
             threshold = block.up_to_kwh_per_month
             if threshold is None:
-                # Catch-all — bill everything left at this rate.
-                monthly_energy[month - 1] += remaining * block.rate_per_kwh
-                cursor += remaining
+                monthly_energy[month_idx] += remaining * block.rate_per_kwh
                 remaining = 0.0
                 break
             if cursor >= threshold:
                 continue
-            available = threshold - cursor
-            portion = min(remaining, available)
-            monthly_energy[month - 1] += portion * block.rate_per_kwh
+            portion = min(remaining, threshold - cursor)
+            monthly_energy[month_idx] += portion * block.rate_per_kwh
             cursor += portion
             remaining -= portion
-        monthly_kwh_so_far[month - 1] = cursor
 
-    return monthly_energy
+    return monthly_energy, monthly_kwh
 
 
 def _bill_tou(
     *,
     hourly_import_kwh: list[float],
     tariff: TariffSchedule,
-) -> list[float]:
-    """Per-month energy charges for a TOU tariff."""
+) -> tuple[list[float], list[float]]:
+    """Per-month (energy_charge, kwh_imported) for a TOU tariff."""
     periods = tariff.tou_periods
     if not periods:
         raise ValueError("tou tariff requires tou_periods")
 
     monthly_energy = [0.0] * 12
+    monthly_kwh = [0.0] * 12
     for hour_index, kwh in enumerate(hourly_import_kwh):
         if kwh <= 0:
             continue
-        month, is_weekday, hour_of_day = _hour_to_calendar(hour_index)
+        month, is_weekday, hour_of_day = _TMY_CALENDAR[hour_index]
         period = _matching_tou_period(
             periods=periods,
             month=month,
@@ -182,8 +183,9 @@ def _bill_tou(
                 f"no TOU period matches hour_index={hour_index} "
                 f"(month={month}, is_weekday={is_weekday}, hour={hour_of_day})"
             )
+        monthly_kwh[month - 1] += kwh
         monthly_energy[month - 1] += kwh * period.rate_per_kwh
-    return monthly_energy
+    return monthly_energy, monthly_kwh
 
 
 def compute_annual_bill(
@@ -194,11 +196,10 @@ def compute_annual_bill(
     """Bill 8760 hours of net load against a tariff schedule.
 
     Negative entries (grid export) are treated as zero for billing —
-    export credits live in ``engine.export_credit`` (chart-solar-cvn).
-    For NEM 1:1 sites, the caller can pre-net the array and pass
-    ``max(net_load, 0)`` separately, or feed signed net load straight
-    through (negative entries collapse to zero so an over-producing
-    month bottoms out at the fixed charge).
+    export credits live in ``engine.export_credit``. For NEM 1:1 sites
+    the caller pre-nets the array; for NEM 3.0 / NBT, the export
+    credit is computed separately and netted against this bill at the
+    monthly true-up.
     """
     if len(hourly_net_load_kwh) != HOURS_PER_TMY:
         raise ValueError(
@@ -211,21 +212,20 @@ def compute_annual_bill(
     if tariff.structure == "flat":
         if tariff.flat_rate_per_kwh is None:
             raise ValueError("flat tariff requires flat_rate_per_kwh")
-        monthly_energy = _bill_flat(
+        monthly_energy, monthly_kwh = _bill_flat(
             hourly_import_kwh=hourly_import,
             rate_per_kwh=tariff.flat_rate_per_kwh,
         )
     elif tariff.structure == "tiered":
-        monthly_energy = _bill_tiered(hourly_import_kwh=hourly_import, tariff=tariff)
+        monthly_energy, monthly_kwh = _bill_tiered(
+            hourly_import_kwh=hourly_import, tariff=tariff
+        )
     elif tariff.structure == "tou":
-        monthly_energy = _bill_tou(hourly_import_kwh=hourly_import, tariff=tariff)
+        monthly_energy, monthly_kwh = _bill_tou(
+            hourly_import_kwh=hourly_import, tariff=tariff
+        )
     else:
         raise ValueError(f"unknown tariff structure: {tariff.structure!r}")
-
-    monthly_kwh = [0.0] * 12
-    for hour_index, kwh in enumerate(hourly_import):
-        month, _, _ = _hour_to_calendar(hour_index)
-        monthly_kwh[month - 1] += kwh
 
     fixed_per_month = tariff.fixed_monthly_charge
     monthly_bills = [
