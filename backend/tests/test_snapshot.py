@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 from pydantic import BaseModel
@@ -14,10 +15,6 @@ from backend.engine.snapshot import (
     current_pvlib_version,
     hash_canonical,
 )
-
-# ---------------------------------------------------------------------------
-# hash_canonical
-# ---------------------------------------------------------------------------
 
 
 def test_hash_canonical_is_whitespace_and_key_order_insensitive() -> None:
@@ -57,11 +54,6 @@ def test_hash_canonical_returns_hex_digest_length_64() -> None:
     int(digest, 16)  # parses as hex
 
 
-# ---------------------------------------------------------------------------
-# Version pickers
-# ---------------------------------------------------------------------------
-
-
 def test_current_engine_version_is_a_string() -> None:
     v = current_engine_version()
     assert isinstance(v, str)
@@ -74,13 +66,8 @@ def test_current_pvlib_version_matches_imported() -> None:
     assert current_pvlib_version() == str(pvlib.__version__)
 
 
-# ---------------------------------------------------------------------------
-# Snapshot equality / matches semantics
-# ---------------------------------------------------------------------------
-
-
-def _sample_snapshot(**overrides: object) -> Snapshot:
-    base = {
+def _sample_snapshot(**overrides: Any) -> Snapshot:
+    base: dict[str, Any] = {
         "engine_version": "0.0.0",
         "pvlib_version": "0.15.1",
         "irradiance_source": "pvgis",
@@ -135,11 +122,6 @@ def test_snapshot_validates_hash_lengths() -> None:
         _sample_snapshot(tariff_hash="too-short")
     with pytest.raises(ValueError):
         _sample_snapshot(inputs_hash="too-short")
-
-
-# ---------------------------------------------------------------------------
-# build_snapshot
-# ---------------------------------------------------------------------------
 
 
 def test_build_snapshot_uses_live_versions_and_hashes_inputs() -> None:

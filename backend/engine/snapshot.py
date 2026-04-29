@@ -1,28 +1,15 @@
 """Snapshot pinning — every saved forecast / audit is reproducible.
 
-A `Snapshot` captures the *complete* set of versions and content
-hashes the engine consumed when it produced a result. When the user
-re-opens a saved forecast we re-run the engine only if the live
-snapshot differs; otherwise the cached result is served verbatim. The
-methodology PDF reads from this so "this $/W came from PVGIS on
+A `Snapshot` captures the version + content state the engine consumed
+when it produced a result. Re-opening a saved forecast re-runs only if
+the live snapshot diverges; otherwise the cached result is served. The
+methodology PDF reads from these pins so "this $/W came from PVGIS on
 2026-04-12 against this exact tariff schedule" is traceable.
-
-The four pins per PRODUCT_PLAN.md § Snapshots are versioned:
-
-* `engine_version` — the chart-solar package version (from
-  pyproject.toml via importlib.metadata)
-* `pvlib_version` — pvlib's version (live import; pinned in uv.lock)
-* `irradiance_source` + `irradiance_fetched_at` — which provider gave
-  the TMY, and when (so a re-fetch invalidates the snapshot)
-* `tariff_hash` — sha256 of the canonical-JSON tariff schedule (a
-  rate-card change invalidates the snapshot even if every other input
-  is unchanged)
-* `inputs_hash` — sha256 of the user-supplied inputs (system size,
-  tilt, financing, etc.); covers any input the engine reads.
 """
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -30,26 +17,21 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _package_version
 from typing import Any, Literal
 
+import pvlib
 from pydantic import BaseModel, Field
 
-# Mirrors the `IrradianceSource` Literal in `backend.providers.irradiance`.
-# Duplicated here so this module stays importable from any branch — the
-# provider package lands separately and the registry is small enough that
-# keeping it in two places is cheaper than the cross-branch coupling.
+# Mirrors the `IrradianceSource` Literal in `backend.providers.irradiance`;
+# kept local so this module imports cleanly before that package lands. The
+# duplication collapses to one source of truth once both branches merge.
 IrradianceSource = Literal["nsrdb", "pvgis", "openmeteo"]
 
 ENGINE_PACKAGE_NAME = "chart-solar-backend"
 
+_PVLIB_VERSION: str = str(pvlib.__version__)
+
 
 class Snapshot(BaseModel):
-    """A reproducibility receipt for one engine run.
-
-    Two snapshots from the same inputs run on the same code MUST be
-    equal — `model_dump()` is the canonical comparison form. The
-    `inputs_hash` + `tariff_hash` + `irradiance_*` fields capture
-    everything the engine reads; the version fields capture the code
-    that processed it.
-    """
+    """One reproducibility receipt: pinned versions + content hashes."""
 
     engine_version: str
     pvlib_version: str
@@ -60,27 +42,22 @@ class Snapshot(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def matches(self, other: Snapshot) -> bool:
-        """Are these two snapshots interchangeable?
+        """True when two snapshots are cache-equivalent.
 
-        Equal versions + equal hashes + equal irradiance fetch identity
-        → yes. `created_at` is intentionally NOT part of the match —
-        two snapshots an hour apart with otherwise-identical state
-        should compare equal so we don't re-run the engine pointlessly.
+        Compares everything *except* `created_at` — two snapshots minutes
+        apart with identical state must match so the cache stays warm.
+        Excluding via `model_dump` rather than a hand-listed field set
+        means a new pin added to the model is automatically covered.
         """
-        return (
-            self.engine_version == other.engine_version
-            and self.pvlib_version == other.pvlib_version
-            and self.irradiance_source == other.irradiance_source
-            and self.irradiance_fetched_at == other.irradiance_fetched_at
-            and self.tariff_hash == other.tariff_hash
-            and self.inputs_hash == other.inputs_hash
-        )
+        excluded = {"created_at"}
+        return self.model_dump(exclude=excluded) == other.model_dump(exclude=excluded)
 
 
+@functools.lru_cache(maxsize=1)
 def current_engine_version() -> str:
-    """Read the live package version. Falls back to ``"unknown"`` when
-    the package isn't installed (e.g., running from an editable source
-    tree before `uv sync` has populated metadata)."""
+    """Live package version, cached forever — package metadata can't
+    change at runtime. Falls back to ``"unknown"`` when running from an
+    editable tree without installed metadata."""
     try:
         return _package_version(ENGINE_PACKAGE_NAME)
     except PackageNotFoundError:
@@ -88,21 +65,17 @@ def current_engine_version() -> str:
 
 
 def current_pvlib_version() -> str:
-    """Read pvlib's version live. We don't cache because pvlib pins
-    rarely move and the cost is one attribute lookup."""
-    import pvlib
-
-    return str(pvlib.__version__)
+    return _PVLIB_VERSION
 
 
 def hash_canonical(value: Any) -> str:
-    """sha256 of the canonical-JSON representation of `value`.
+    """sha256 of canonical JSON — whitespace + key-order insensitive.
 
-    Pydantic models go through `model_dump(mode="json")` first.
-    Dicts / lists / scalars are dumped via `json.dumps(sort_keys=True,
-    separators=(",", ":"))` so equivalent inputs hash equal regardless
-    of whitespace or key order. `default=str` catches stragglers like
-    `datetime` and `Decimal`."""
+    Pydantic models go through `model_dump(mode="json")`; everything else
+    is fed straight to `json.dumps(sort_keys=True, default=str)` so
+    `datetime` / `Decimal` / similar stragglers serialise without a
+    custom encoder.
+    """
     if isinstance(value, BaseModel):
         payload: Any = value.model_dump(mode="json")
     else:
@@ -118,8 +91,7 @@ def build_snapshot(
     irradiance_source: IrradianceSource,
     irradiance_fetched_at: datetime,
 ) -> Snapshot:
-    """One-call constructor: canonicalises + hashes both inputs and
-    the tariff schedule, picks up live versions for engine + pvlib."""
+    """Picks up live versions, canonicalises + hashes inputs and tariff."""
     return Snapshot(
         engine_version=current_engine_version(),
         pvlib_version=current_pvlib_version(),
