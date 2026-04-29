@@ -80,9 +80,7 @@ def cell_temperature_celsius(
 
     if model == "sapm":
         if sapm_mount not in SAPM_MOUNTS:
-            raise ValueError(
-                f"unknown sapm_mount {sapm_mount!r}; known: {sorted(SAPM_MOUNTS)}"
-            )
+            raise ValueError(f"unknown sapm_mount {sapm_mount!r}; known: {sorted(SAPM_MOUNTS)}")
         params = SAPM_MOUNTS[sapm_mount]
         result = pvlib.temperature.sapm_cell(
             poa_global=poa,

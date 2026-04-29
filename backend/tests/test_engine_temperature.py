@@ -114,9 +114,7 @@ def test_derate_factor_above_one_at_cold_panel() -> None:
 def test_derate_factor_clamps_at_zero() -> None:
     """Pathological cell temp + gamma combo would push the linear
     model below zero — we clamp."""
-    factors = temperature_derate_factor(
-        hourly_cell_temp_c=[1000.0], gamma_pdc=-0.005, t_ref_c=25.0
-    )
+    factors = temperature_derate_factor(hourly_cell_temp_c=[1000.0], gamma_pdc=-0.005, t_ref_c=25.0)
     assert factors[0] == 0.0
 
 
