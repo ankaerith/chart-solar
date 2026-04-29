@@ -1,15 +1,10 @@
 """Critical-field registry + confidence helpers.
 
-Per chart-solar-3hi: critical fields (gross price, kW-DC, panel count,
-year-1 kWh) are flagged separately so the audit pipeline can:
-
-* refuse to emit an audit if any critical field has confidence below
-  the user-correction threshold (`needs_user_review`),
-* feed the escalation policy — low confidence on a critical field is a
-  signal to retry against a stronger model tier.
-
-`CRITICAL_FIELDS` is a `frozenset` of dotted-path field names against
-`ExtractedProposal`. Add a row here = one place to edit.
+The four critical fields (gross price, kW-DC, panel count, year-1 kWh)
+gate two policies: the audit pipeline refuses to ship if any of them
+has confidence below `CRITICAL_FIELD_REVIEW_THRESHOLD`, and the
+extraction step's escalation policy treats a low-confidence critical
+field as a signal to retry against a stronger model tier.
 """
 
 from __future__ import annotations

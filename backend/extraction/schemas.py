@@ -138,11 +138,6 @@ class Financial(BaseModel):
     payback_year_claimed: Extracted[float] | None = None
 
 
-# ---------------------------------------------------------------------------
-# Installer
-# ---------------------------------------------------------------------------
-
-
 class Installer(BaseModel):
     """Company-level + sales-rep info. Per LEGAL_CONSIDERATIONS.md F1
     sales-rep direct PII (phone, email) is stripped at extraction; we
@@ -178,11 +173,6 @@ class Operational(BaseModel):
     production_estimate_source: Extracted[ProductionEstimateSource]
     monitoring_years_free: Extracted[int] | None = None
     service_agreement_terms: Extracted[str] | None = None
-
-
-# ---------------------------------------------------------------------------
-# Top-level
-# ---------------------------------------------------------------------------
 
 
 class ExtractedProposal(BaseModel):

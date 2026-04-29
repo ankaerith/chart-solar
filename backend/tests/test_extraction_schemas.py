@@ -10,7 +10,6 @@ layer up; here we test the structure it has to fit into.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -33,10 +32,6 @@ from backend.extraction import (
 )
 from backend.extraction.critical_fields import CRITICAL_FIELD_REVIEW_THRESHOLD
 
-# ---------------------------------------------------------------------------
-# Extracted[T] generic
-# ---------------------------------------------------------------------------
-
 
 def test_extracted_accepts_value_with_confidence_and_quote() -> None:
     e: Extracted[float] = Extracted(value=8.0, confidence=0.95, source_quote="Total DC kW: 8.0")
@@ -57,11 +52,6 @@ def test_extracted_rejects_confidence_outside_unit_interval() -> None:
         Extracted[float](value=1.0, confidence=1.5)
     with pytest.raises(ValidationError):
         Extracted[float](value=1.0, confidence=-0.1)
-
-
-# ---------------------------------------------------------------------------
-# Equipment shapes
-# ---------------------------------------------------------------------------
 
 
 def test_panel_equipment_round_trips() -> None:
@@ -88,11 +78,6 @@ def test_inverter_type_is_constrained() -> None:
             type=Extracted(value="not-a-valid-type", confidence=0.5),
             rated_kw=Extracted(value=7.6, confidence=0.5),
         )
-
-
-# ---------------------------------------------------------------------------
-# Financial shapes
-# ---------------------------------------------------------------------------
 
 
 def test_financing_validates_apr_in_zero_one() -> None:
@@ -122,11 +107,6 @@ def test_line_items_are_listed_and_kinds_constrained() -> None:
         LineItem(name="x", amount=10.0, kind="not-a-kind")
 
 
-# ---------------------------------------------------------------------------
-# Top-level proposal
-# ---------------------------------------------------------------------------
-
-
 def test_full_proposal_round_trips_through_json() -> None:
     """Gemini returns JSON; ensure the entire shape parses + serialises
     without losing anything."""
@@ -150,11 +130,6 @@ def test_proposal_overall_confidence_in_unit_interval() -> None:
 def test_proposal_extraction_notes_optional() -> None:
     proposal = _full_proposal()
     assert proposal.extraction_notes is None
-
-
-# ---------------------------------------------------------------------------
-# Critical-field registry + helpers
-# ---------------------------------------------------------------------------
 
 
 def test_critical_fields_match_product_plan() -> None:
@@ -216,11 +191,6 @@ def test_critical_review_threshold_is_strict_enough_to_catch_uncertain_fields() 
     assert CRITICAL_FIELD_REVIEW_THRESHOLD == pytest.approx(0.75)
 
 
-# ---------------------------------------------------------------------------
-# JSON-schema export sanity (this is what we send Gemini as the tool spec)
-# ---------------------------------------------------------------------------
-
-
 def test_extracted_proposal_emits_json_schema() -> None:
     """Gemini's structured-output tool config consumes JSON Schema; the
     model_json_schema() round-trip must succeed at module load — tests
@@ -230,11 +200,6 @@ def test_extracted_proposal_emits_json_schema() -> None:
     assert {"system", "financial", "installer", "operational"}.issubset(
         set(schema["properties"].keys())
     )
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _full_system_equipment() -> SystemEquipment:
@@ -319,7 +284,3 @@ def _full_proposal() -> ExtractedProposal:
         overall_confidence=0.92,
         needs_stronger_model=False,
     )
-
-
-# Quiet the linter — `Any` is referenced via casts in some helpers.
-_ = Any
