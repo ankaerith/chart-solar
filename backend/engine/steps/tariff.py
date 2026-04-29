@@ -203,8 +203,7 @@ def compute_annual_bill(
     """
     if len(hourly_net_load_kwh) != HOURS_PER_TMY:
         raise ValueError(
-            f"hourly_net_load_kwh must be {HOURS_PER_TMY} entries "
-            f"(got {len(hourly_net_load_kwh)})"
+            f"hourly_net_load_kwh must be {HOURS_PER_TMY} entries (got {len(hourly_net_load_kwh)})"
         )
 
     hourly_import = [max(0.0, kwh) for kwh in hourly_net_load_kwh]
@@ -217,13 +216,9 @@ def compute_annual_bill(
             rate_per_kwh=tariff.flat_rate_per_kwh,
         )
     elif tariff.structure == "tiered":
-        monthly_energy, monthly_kwh = _bill_tiered(
-            hourly_import_kwh=hourly_import, tariff=tariff
-        )
+        monthly_energy, monthly_kwh = _bill_tiered(hourly_import_kwh=hourly_import, tariff=tariff)
     elif tariff.structure == "tou":
-        monthly_energy, monthly_kwh = _bill_tou(
-            hourly_import_kwh=hourly_import, tariff=tariff
-        )
+        monthly_energy, monthly_kwh = _bill_tou(hourly_import_kwh=hourly_import, tariff=tariff)
     else:
         raise ValueError(f"unknown tariff structure: {tariff.structure!r}")
 
