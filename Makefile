@@ -10,17 +10,17 @@ worker:
 	uv run python -m backend.workers.forecast_worker
 
 web:
-	cd frontend && npm run dev
+	cd frontend && bun run dev
 
 test:
 	uv run pytest
 
 lint:
 	uv run ruff check
-	cd frontend && npm run lint
+	cd frontend && bun run lint
 
 typecheck:
-	cd frontend && npm run typecheck
+	cd frontend && bun run typecheck
 
 build:
 	docker compose build

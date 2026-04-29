@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from typing import Any
+
+from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 
 from backend.database import SessionLocal
@@ -8,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("/health")
-async def health() -> dict:
+async def health(response: Response) -> dict[str, Any]:
     db_ok = False
     redis_ok = False
     try:
@@ -22,8 +24,11 @@ async def health() -> dict:
         redis_ok = True
     except Exception:
         pass
+    healthy = db_ok and redis_ok
+    if not healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {
-        "status": "ok" if db_ok and redis_ok else "degraded",
+        "status": "ok" if healthy else "degraded",
         "db": db_ok,
         "redis": redis_ok,
     }

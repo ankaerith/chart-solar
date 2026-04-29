@@ -1,6 +1,5 @@
 """RQ worker: consumes the `forecasts` queue and runs the engine pipeline."""
 
-import sys
 from typing import Any
 
 from rq import Worker
@@ -23,4 +22,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    sys.exit(0)

@@ -13,9 +13,8 @@ RUN pip install --no-cache-dir uv
 
 WORKDIR /app
 
-COPY pyproject.toml ./
-COPY uv.lock* ./
-RUN uv sync --no-dev
+COPY pyproject.toml uv.lock ./
+RUN uv sync --no-dev --frozen
 
 COPY backend ./backend
 COPY alembic.ini ./
