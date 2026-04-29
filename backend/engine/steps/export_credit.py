@@ -24,16 +24,14 @@ module just consumes them.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from backend.engine.registry import register
+from backend.engine.types import ExportRegime
 from backend.providers.tariff import TariffSchedule, TouPeriod
 
 HOURS_PER_TMY = 8760
-
-ExportRegime = Literal["nem_one_for_one", "nem_three_nbt", "seg_flat", "seg_tou"]
 
 
 def _build_tmy_calendar() -> tuple[tuple[int, bool, int], ...]:

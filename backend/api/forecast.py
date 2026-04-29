@@ -59,28 +59,28 @@ async def submit_forecast(
     namespaced_key = f"{user_id}:{body_hash}"
 
     job_id = str(uuid4())
-    response_body: dict[str, Any] = {"job_id": job_id, "status": "queued"}
+    candidate_response: dict[str, Any] = {"job_id": job_id, "status": "queued"}
 
     async with _db.SessionLocal() as session:
-        winning_response = await claim_idempotency_slot(
+        won, response_body = await claim_idempotency_slot(
             session,
             route=FORECAST_ROUTE_KEY,
             key=namespaced_key,
             request_hash=body_hash,
-            response_body=response_body,
+            response_body=candidate_response,
         )
 
-    if winning_response["job_id"] != job_id:
+    if not won:
         log.info(
             "forecast.idempotent_replay",
             user_id=user_id,
-            cached_job_id=winning_response["job_id"],
+            cached_job_id=response_body["job_id"],
         )
-        return winning_response
+        return response_body
 
     enqueue_forecast(job_id, inputs.model_dump())
     log.info("forecast.enqueued", job_id=job_id, user_id=user_id)
-    return winning_response
+    return response_body
 
 
 @router.get("/forecast/{job_id}")

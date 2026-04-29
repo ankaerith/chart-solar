@@ -60,24 +60,11 @@ def _baseline_inputs(
     )
 
 
-def test_export_regime_literal_stays_in_sync_with_dispatcher() -> None:
-    """The ``ExportRegime`` Literal is duplicated in ``engine.inputs`` to
-    break a circular import. Both definitions must list identical
-    regime names — drift would silently let the API accept a regime
-    the dispatcher rejects (or vice versa)."""
-    from typing import get_args
-
-    from backend.engine.inputs import ExportRegime as InputsExportRegime
-    from backend.engine.steps.export_credit import ExportRegime as DispatcherExportRegime
-
-    assert set(get_args(InputsExportRegime)) == set(get_args(DispatcherExportRegime))
-
-
 def test_canonical_step_order_matches_phase_1a_pipeline() -> None:
     # Order matters: dc_production must come before degradation (degradation
     # reads hold_years off financial inputs but its result feeds tariff
     # year-1 vs year-N math), and tariff must come before export_credit
-    # (export_credit reuses the cached net-load array).
+    # (the latter consumes the same net-load shape).
     expected = (
         "engine.irradiance",
         "engine.consumption",
@@ -194,11 +181,11 @@ def test_pipeline_skips_steps_that_arent_in_the_requested_feature_set() -> None:
     assert "engine.tariff" not in result.artifacts
 
 
-def test_pipeline_caches_intermediate_net_load_for_export_credit() -> None:
-    """Tariff and export-credit adapters share the net-load array. Caching
-    it under `engine.net_load` is documented behaviour the regression tests
-    pin so a future refactor doesn't accidentally split it into two
-    independent computations."""
+def test_pipeline_artifacts_only_carry_step_outputs() -> None:
+    """The pipeline must not leak intermediate derived series (net load,
+    hourly export) into ``artifacts``. Those are private to the
+    tariff and export-credit adapters; exposing them invites callers
+    to depend on plumbing details that should stay free to refactor."""
     schedule = _flat_tariff()
     export = ExportCreditInputs(regime="seg_flat", flat_rate_per_kwh=0.05)
     inputs = _baseline_inputs(schedule=schedule, export_credit=export)
@@ -206,7 +193,8 @@ def test_pipeline_caches_intermediate_net_load_for_export_credit() -> None:
 
     result = run_forecast(inputs, tmy=tmy)
 
-    assert "engine.net_load" in result.artifacts
-    assert "engine.hourly_export_kwh" in result.artifacts
-    assert len(result.artifacts["engine.net_load"]) == HOURS_PER_TMY
-    assert len(result.artifacts["engine.hourly_export_kwh"]) == HOURS_PER_TMY
+    assert "engine.net_load" not in result.artifacts
+    assert "engine.hourly_export_kwh" not in result.artifacts
+    # The step outputs themselves still land where the public contract says.
+    assert "engine.tariff" in result.artifacts
+    assert "engine.export_credit" in result.artifacts

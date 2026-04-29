@@ -81,9 +81,7 @@ def run_forecast(
 
     Artifacts are keyed by feature key so downstream consumers can
     address a step's output without knowing the pipeline's internal
-    composition. Intermediate derived series (net load, hourly export)
-    are stored under ``engine.net_load`` / ``engine.hourly_export_kwh``
-    so the tariff and export-credit adapters share work.
+    composition.
     """
     state = ForecastState(inputs=inputs)
     state.artifacts["engine.irradiance"] = tmy
@@ -119,11 +117,18 @@ def _resolve_consumption(c: ConsumptionInputs | None) -> list[float]:
     if c is None:
         return [0.0] * HOURS_PER_TMY
     if c.hourly_kwh is not None:
-        return list(c.hourly_kwh)
+        return c.hourly_kwh
     if c.annual_kwh is not None:
         even = c.annual_kwh / HOURS_PER_TMY
         return [even] * HOURS_PER_TMY
     return [0.0] * HOURS_PER_TMY
+
+
+def _net_load(state: ForecastState) -> list[float]:
+    """Hourly grid net-load: positive = import, negative = export."""
+    consumption: list[float] = state.artifacts["engine.consumption"]
+    dc: DcProductionResult = state.artifacts["engine.dc_production"]
+    return [c - p for c, p in zip(consumption, dc.hourly_ac_kw, strict=True)]
 
 
 def _adapter_dc_production(state: ForecastState, fn: StepFn) -> None:
@@ -135,30 +140,12 @@ def _adapter_degradation(state: ForecastState, fn: StepFn) -> None:
     state.artifacts["engine.degradation"] = fn(years=state.inputs.financial.hold_years)
 
 
-def _ensure_net_load(state: ForecastState) -> list[float]:
-    """Compute net load (consumption − AC production) once and cache it.
-
-    Both ``engine.tariff`` and ``engine.export_credit`` need this same
-    array; computing it here keeps the per-adapter code linear and
-    side-effect-free aside from the cache write.
-    """
-    cached = state.artifacts.get("engine.net_load")
-    if cached is not None:
-        return list(cached)
-    consumption: list[float] = state.artifacts["engine.consumption"]
-    dc: DcProductionResult = state.artifacts["engine.dc_production"]
-    net_load = [c - p for c, p in zip(consumption, dc.hourly_ac_kw, strict=True)]
-    state.artifacts["engine.net_load"] = net_load
-    return net_load
-
-
 def _adapter_tariff(state: ForecastState, fn: StepFn) -> None:
     schedule = state.inputs.tariff.schedule
     if schedule is None:
         return
-    net_load = _ensure_net_load(state)
     state.artifacts["engine.tariff"] = fn(
-        hourly_net_load_kwh=net_load,
+        hourly_net_load_kwh=_net_load(state),
         tariff=schedule,
     )
 
@@ -167,9 +154,7 @@ def _adapter_export_credit(state: ForecastState, fn: StepFn) -> None:
     config = state.inputs.tariff.export_credit
     if config is None:
         return
-    net_load = _ensure_net_load(state)
-    hourly_export = [max(0.0, -nl) for nl in net_load]
-    state.artifacts["engine.hourly_export_kwh"] = hourly_export
+    hourly_export = [max(0.0, -nl) for nl in _net_load(state)]
     state.artifacts["engine.export_credit"] = fn(
         regime=config.regime,
         hourly_export_kwh=hourly_export,
