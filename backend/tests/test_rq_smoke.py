@@ -17,6 +17,7 @@ from backend.engine.inputs import (
     SystemInputs,
     TariffInputs,
 )
+from backend.infra.logging import set_correlation_id
 from backend.workers.queue import enqueue_forecast, get_queue, get_redis
 
 
@@ -52,3 +53,21 @@ def test_forecast_job_round_trips_through_real_queue(queue: Queue) -> None:
     job = Job.fetch(job_id, connection=get_redis())
     assert job.get_status() == JobStatus.FINISHED
     assert job.result == {"artifacts": {}}
+
+
+def test_correlation_id_propagates_to_job_meta(queue: Queue) -> None:
+    inputs = ForecastInputs(
+        system=SystemInputs(lat=47.6, lon=-122.3, dc_kw=8.0, tilt_deg=25, azimuth_deg=180),
+        financial=FinancialInputs(),
+        tariff=TariffInputs(country="US"),
+    )
+    job_id = str(uuid4())
+
+    set_correlation_id("test-corr-id-xyz")
+    try:
+        enqueue_forecast(job_id, inputs.model_dump())
+    finally:
+        set_correlation_id(None)
+
+    job = Job.fetch(job_id, connection=get_redis())
+    assert job.meta["correlation_id"] == "test-corr-id-xyz"

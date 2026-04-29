@@ -8,6 +8,7 @@ from rq import Queue
 from rq.job import Job
 
 from backend.config import settings
+from backend.infra.logging import get_correlation_id
 
 
 @lru_cache(maxsize=1)
@@ -21,9 +22,15 @@ def get_queue() -> Queue:
 
 
 def enqueue_forecast(job_id: str, payload: dict[str, Any]) -> None:
+    """Enqueue a forecast job, carrying the active correlation ID in job meta."""
     from backend.workers.forecast_worker import run_forecast_job
 
-    get_queue().enqueue(run_forecast_job, payload, job_id=job_id)
+    get_queue().enqueue(
+        run_forecast_job,
+        payload,
+        job_id=job_id,
+        meta={"correlation_id": get_correlation_id()},
+    )
 
 
 def get_job(job_id: str) -> Job | None:
