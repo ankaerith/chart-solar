@@ -1,21 +1,88 @@
 @import "tailwindcss";
 
-:root {
-  --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
-  --muted-foreground: 215.4 16.3% 46.9%;
-}
+/* Solstice·Ink — locked launch theme.
+   Cool oyster paper, prussian-blue ink, oxblood secondary.
+   See frontend/lib/theme.md for the canonical token reference. */
+:root,
+:root[data-theme="solstice-ink"] {
+  /* surface */
+  --bg: #ecebe3;
+  --bg-2: #dfdecf;
+  --panel: #f7f5ec;
+  --panel-2: #e8e6d6;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --muted-foreground: 215 20.2% 65.1%;
-  }
+  /* ink */
+  --ink: #0f1421;
+  --ink-2: #1f2a3f;
+  --ink-dim: #566173;
+  --ink-faint: #8a92a0;
+
+  /* rules */
+  --rule: #c4bfac;
+  --rule-strong: #0f1421;
+
+  /* accents */
+  --accent: #1d3461;
+  --accent-ink: #f7f5ec;
+  --accent-2: #7a2826;
+
+  /* status */
+  --good: #2e6b48;
+  --warn: #a86512;
+  --bad: #7a2826;
+
+  /* type */
+  --display-weight: 600;
+  --display-tracking: -0.022em;
+
+  /* radius */
+  --radius: 6px;
+  --radius-lg: 10px;
 }
 
 @theme inline {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-bg: var(--bg);
+  --color-bg-2: var(--bg-2);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-dim: var(--ink-dim);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-2: var(--accent-2);
+
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+
+  /* fonts: next/font on <html> exposes --font-display, --font-body, --font-mono */
+  --font-display: var(--font-display), "Source Serif 4", Georgia, serif;
+  --font-sans: var(--font-body), system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-lg);
+}
+
+html {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6, .display {
+  font-family: var(--font-display), "Source Serif 4", Georgia, serif;
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
 }
