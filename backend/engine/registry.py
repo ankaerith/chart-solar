@@ -7,9 +7,15 @@ caller's tier. Keeps engine composition declarative.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 StepFn = Callable[..., Any]
+
+#: Decorators that preserve a function's exact call signature must bind
+#: the same TypeVar on input and output. Without this, `@register` would
+#: widen every wrapped step to ``Callable[..., Any]`` and mypy could no
+#: longer flag bad call-sites at the step's true signature.
+F = TypeVar("F", bound=Callable[..., Any])
 
 
 @dataclass(frozen=True)
@@ -21,8 +27,8 @@ class StepRegistration:
 _STEPS: list[StepRegistration] = []
 
 
-def register(feature_key: str) -> Callable[[StepFn], StepFn]:
-    def decorator(fn: StepFn) -> StepFn:
+def register(feature_key: str) -> Callable[[F], F]:
+    def decorator(fn: F) -> F:
         _STEPS.append(StepRegistration(feature_key=feature_key, fn=fn))
         return fn
 

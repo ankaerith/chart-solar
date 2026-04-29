@@ -28,6 +28,7 @@ from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel, Field
 
+from backend.engine.registry import register
 from backend.providers.tariff import (
     CurrencyCode,
     TariffSchedule,
@@ -188,6 +189,7 @@ def _bill_tou(
     return monthly_energy, monthly_kwh
 
 
+@register("engine.tariff")
 def compute_annual_bill(
     *,
     hourly_net_load_kwh: list[float],
