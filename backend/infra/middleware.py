@@ -3,8 +3,6 @@
 Honors `X-Request-Id` from the client when present; otherwise mints a fresh
 uuid4 hex. The value is bound to a ContextVar so structlog picks it up
 automatically in every log emitted during the request.
-
-Bead: chart-solar-z0uz.
 """
 
 from __future__ import annotations

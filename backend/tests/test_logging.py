@@ -1,7 +1,4 @@
-"""Correlation ID flow: HTTP middleware → contextvar → enqueue → worker.
-
-Bead: chart-solar-z0uz.
-"""
+"""Correlation ID flow: HTTP middleware → contextvar → enqueue → worker."""
 
 from fastapi.testclient import TestClient
 

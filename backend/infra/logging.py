@@ -1,11 +1,9 @@
 """Structured logging with correlation IDs.
 
 JSON output, ISO-8601 timestamps, level-tagged. A single `correlation_id`
-flows from HTTP request → API handler → enqueue (in job kwargs) → worker →
+flows from HTTP request → API handler → enqueue (job meta) → worker →
 external calls so a "forecast stuck" investigation pivots cleanly across
 processes.
-
-Bead: chart-solar-z0uz.
 """
 
 from __future__ import annotations
@@ -44,7 +42,8 @@ def _bind_correlation(
     cid = _correlation_id.get()
     if cid is not None:
         event_dict.setdefault("correlation_id", cid)
-    sentry_sdk.set_tag("correlation_id", cid or "")
+        if settings.sentry_dsn:
+            sentry_sdk.set_tag("correlation_id", cid)
     return event_dict
 
 

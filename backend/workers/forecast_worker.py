@@ -14,12 +14,13 @@ log = get_logger(__name__)
 
 def run_forecast_job(payload: dict[str, Any]) -> dict[str, Any]:
     job = get_current_job()
+    job_id = job.id if job else None
     set_correlation_id(job.meta.get("correlation_id") if job else None)
 
-    log.info("forecast.start", job_id=job.id if job else None)
+    log.info("forecast.start", job_id=job_id)
     inputs = ForecastInputs.model_validate(payload)
     result = run_forecast(inputs)
-    log.info("forecast.complete", job_id=job.id if job else None)
+    log.info("forecast.complete", job_id=job_id)
     return {"artifacts": result.artifacts}
 
 
