@@ -40,10 +40,6 @@ from backend.providers.tariff import (
     TouPeriod,
 )
 
-# ---------------------------------------------------------------------------
-# TariffProvider
-# ---------------------------------------------------------------------------
-
 
 async def test_fake_tariff_returns_country_default() -> None:
     p: TariffProvider = FakeTariffProvider()
@@ -95,11 +91,6 @@ def test_tariff_schedule_validates_structure_consistency() -> None:
         TariffSchedule(name="x", utility="x", structure="tou")
 
 
-# ---------------------------------------------------------------------------
-# IncentiveProvider
-# ---------------------------------------------------------------------------
-
-
 async def test_fake_incentive_us_returns_federal_itc_in_window() -> None:
     p: IncentiveProvider = FakeIncentiveProvider()
     incentives = await p.fetch(IncentiveQuery(jurisdiction="US-CA", install_date=date(2026, 6, 1)))
@@ -135,11 +126,6 @@ async def test_fake_incentive_add_lets_tests_inject_rows() -> None:
     assert any(i.name == "Custom Rebate" for i in incentives)
 
 
-# ---------------------------------------------------------------------------
-# GeocodingProvider
-# ---------------------------------------------------------------------------
-
-
 async def test_fake_geocoding_known_landmarks() -> None:
     p: GeocodingProvider = FakeGeocodingProvider()
     boulder = await p.geocode("Boulder, CO")
@@ -167,11 +153,6 @@ async def test_fake_geocoding_reverse_falls_back_for_unknown() -> None:
     p = FakeGeocodingProvider()
     out = await p.reverse(0.0, 0.0)
     assert out.country == "ZZ"
-
-
-# ---------------------------------------------------------------------------
-# MonitoringProvider
-# ---------------------------------------------------------------------------
 
 
 async def test_fake_monitoring_round_trips_readings() -> None:
@@ -225,11 +206,6 @@ async def test_fake_monitoring_unknown_site_raises() -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# DI swap test (acceptance criterion 6)
-# ---------------------------------------------------------------------------
-
-
 async def consumer_quotes_first_year_bill(
     provider: TariffProvider,
     annual_kwh: float,
@@ -274,11 +250,6 @@ async def test_swap_tariff_provider_requires_zero_consumer_change() -> None:
     cheap_bill = await consumer_quotes_first_year_bill(cheap_provider, annual_kwh=12_000)
     assert cheap_bill == pytest.approx(60.0 + 1_200.0)
     assert cheap_bill < default_bill
-
-
-# ---------------------------------------------------------------------------
-# Sanity: every Fake satisfies its Protocol via runtime_checkable.
-# ---------------------------------------------------------------------------
 
 
 def test_fakes_satisfy_their_protocols() -> None:

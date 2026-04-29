@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 
-from backend.providers.geocoding import GeocodedLocation, GeocodingProvider
+from backend.providers.geocoding import GeocodedLocation
 
 _KNOWN: dict[str, GeocodedLocation] = {
     "boulder, co": GeocodedLocation(
@@ -82,6 +82,3 @@ def _hashed_location(address: str) -> GeocodedLocation:
         country="ZZ",
         place_id=f"fake-hashed-{digest[:4].hex()}",
     )
-
-
-_: GeocodingProvider = FakeGeocodingProvider()

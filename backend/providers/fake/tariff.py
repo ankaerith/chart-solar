@@ -1,16 +1,11 @@
 """Deterministic in-memory `TariffProvider`.
 
-Defaults give every (US/UK) lookup a sensible flat-rate schedule;
-tests can pre-populate the registry to inject specific shapes (tiered,
-TOU, edge-case rates) without touching live URDB or Octopus."""
+Defaults cover US + GB with a flat rate; tests pre-populate the
+registry via `.register()` to inject tiered / TOU / edge-case shapes."""
 
 from __future__ import annotations
 
-from backend.providers.tariff import (
-    TariffProvider,
-    TariffQuery,
-    TariffSchedule,
-)
+from backend.providers.tariff import TariffQuery, TariffSchedule
 
 
 class FakeTariffProvider:
@@ -55,7 +50,3 @@ class FakeTariffProvider:
             f"FakeTariffProvider has no default for country={query.country!r}; "
             f"call .register() in the test setup"
         )
-
-
-# Type-only assertion: `FakeTariffProvider` satisfies the Protocol.
-_: TariffProvider = FakeTariffProvider()

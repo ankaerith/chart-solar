@@ -8,11 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
-from backend.providers.monitoring import (
-    MonitoringProvider,
-    MonitoringReading,
-    MonitoringSite,
-)
+from backend.providers.monitoring import MonitoringReading, MonitoringSite
 
 
 class FakeMonitoringProvider:
@@ -51,6 +47,3 @@ class FakeMonitoringProvider:
         start_ts = datetime.combine(start, datetime.min.time(), tzinfo=UTC)
         end_ts = datetime.combine(end, datetime.min.time(), tzinfo=UTC) + timedelta(days=1)
         return [r for r in self._production[site_id] if start_ts <= r.timestamp_utc < end_ts]
-
-
-_: MonitoringProvider = FakeMonitoringProvider()

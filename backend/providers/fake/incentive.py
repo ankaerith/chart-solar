@@ -8,11 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from backend.providers.incentive import (
-    Incentive,
-    IncentiveProvider,
-    IncentiveQuery,
-)
+from backend.providers.incentive import Incentive, IncentiveQuery
 
 
 class FakeIncentiveProvider:
@@ -55,6 +51,3 @@ def _applies(incentive: Incentive, query: IncentiveQuery) -> bool:
     if incentive.start_date and query.install_date < incentive.start_date:
         return False
     return not (incentive.end_date and query.install_date > incentive.end_date)
-
-
-_: IncentiveProvider = FakeIncentiveProvider()
