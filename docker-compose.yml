@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: chart_solar
+      POSTGRES_PASSWORD: chart_solar
+      POSTGRES_DB: chart_solar
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on: [postgres, redis]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://chart_solar:chart_solar@postgres:5432/chart_solar
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    depends_on: [postgres, redis]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://chart_solar:chart_solar@postgres:5432/chart_solar
+      REDIS_URL: redis://redis:6379/0
+
+  web:
+    build:
+      context: ./frontend
+    depends_on: [api]
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:
