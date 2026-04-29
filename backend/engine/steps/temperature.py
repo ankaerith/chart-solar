@@ -37,10 +37,7 @@ DEFAULT_GAMMA_PDC: float = -0.004
 
 #: Convenience: the SAPM mount presets pvlib ships, exposed here so
 #: callers don't have to reach into pvlib namespace.
-SAPM_MOUNTS: dict[str, dict[str, float]] = {
-    name: {**params}
-    for name, params in pvlib.temperature.TEMPERATURE_MODEL_PARAMETERS["sapm"].items()
-}
+SAPM_MOUNTS: dict[str, dict[str, float]] = pvlib.temperature.TEMPERATURE_MODEL_PARAMETERS["sapm"]
 
 
 class CellTemperatureSeries(BaseModel):
