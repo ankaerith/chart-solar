@@ -47,6 +47,11 @@ known-third-party = ["alembic"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Session-scoped event loop so tests can share a single async DB engine
+# without "Future attached to a different loop" failures from per-test loops
+# closing connections opened on a sibling loop.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["backend/tests"]
 
 [tool.mypy]
