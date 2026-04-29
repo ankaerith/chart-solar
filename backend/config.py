@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     resend_from_email: str = "noreply@chartsolar.io"
 
+    # Irradiance providers
+    nsrdb_api_key: str | None = None
+    nsrdb_user_email: str | None = None  # NREL PSM3 requires a registered email
+    openmeteo_paid_enabled: bool = False
+    openmeteo_paid_api_key: str | None = None
+
     # Sentry
     sentry_dsn: str | None = None
 
