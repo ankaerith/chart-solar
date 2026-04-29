@@ -50,20 +50,12 @@ bd close <id>         # Complete work
 <!-- END BEADS INTEGRATION -->
 
 
-## Build & Test
+## Where to find things
 
-_Add your build and test commands here_
-
-```bash
-# Example:
-# npm install
-# npm test
-```
-
-## Architecture Overview
-
-_Add a brief overview of your project architecture_
-
-## Conventions & Patterns
-
-_Add your project-specific conventions here_
+- **Strategy**: [`VISION.md`](VISION.md) — wins on conflicts.
+- **Engineering spec**: [`PRODUCT_PLAN.md`](PRODUCT_PLAN.md) — features, architecture, phased roadmap, verification.
+- **Legal**: [`LEGAL_CONSIDERATIONS.md`](LEGAL_CONSIDERATIONS.md) — data sources, IP, AUP, retention.
+- **Engineering practices**: [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — Definition of Done, repo layout, testing, ops.
+- **Architecture decisions**: [`docs/adr/`](docs/adr/) — read the index in `README.md`. Don't edit accepted ADRs in place; supersede.
+- **PR checklist**: [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
+- **Tasks + memory**: `bd ready`, `bd show <id>`, `bd memories <keyword>`.
