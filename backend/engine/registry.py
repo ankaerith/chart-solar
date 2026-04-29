@@ -1,8 +1,9 @@
 """Feature-flag-aware step registry.
 
-A step registers under a feature key (e.g. ``engine.battery.hourly_dispatch``);
-the registry decides at runtime whether to include the step based on the
-caller's tier. Keeps engine composition declarative.
+A step registers under a flat ``engine.<step>`` feature key (e.g.
+``engine.dc_production``, ``engine.tariff``); the registry decides at
+runtime whether to include the step based on the caller's requested
+feature set. Keeps engine composition declarative.
 """
 
 from collections.abc import Callable
