@@ -31,4 +31,6 @@ API at http://localhost:8000/api/health · Web at http://localhost:3000
 
 ## Next
 
-Phase 1a: pvlib pipeline, irradiance providers (NSRDB / PVGIS / Open-Meteo), tariff (flat + TOU + NEM 3.0), finance, Monte Carlo. See `PRODUCT_PLAN.md` § Phased Roadmap. Deployment target is undecided; the stack is container-based and portable across hosts.
+Phase 1a: pvlib pipeline, irradiance providers (NSRDB / PVGIS / Open-Meteo), tariff (flat + TOU + NEM 3.0), finance, Monte Carlo. See `PRODUCT_PLAN.md` § Phased Roadmap.
+
+Stack: Next.js 16 (App Router, React 19) + Tailwind 4 frontend, FastAPI + pvlib backend, Postgres + Redis. Frontend uses **bun**; backend uses **uv**. Container-based and portable — deployment target is undecided.

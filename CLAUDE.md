@@ -62,7 +62,7 @@ bd close <id>         # Complete work
 
 ## Architecture in one paragraph
 
-FastAPI (Python) backend, Next.js 15 (App Router, React 19) frontend, Postgres for state, Redis + RQ for the forecast queue, pvlib for production physics, Vertex AI Gemini for PDF extraction (Phase 1b). Deployed as containers; specific host is undecided and the stack stays portable — no provider-proprietary features in the hot path.
+FastAPI (Python) backend, Next.js 16 (App Router, React 19) frontend, Postgres for state, Redis + RQ for the forecast queue, pvlib for production physics, Vertex AI Gemini for PDF extraction (Phase 1b). Deployed as containers; specific host is undecided and the stack stays portable — no provider-proprietary features in the hot path.
 
 ## Engine layout
 
