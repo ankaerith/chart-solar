@@ -114,12 +114,7 @@ def test_mirr_textbook_example() -> None:
     finance_rate, reinvest_rate = 0.10, 0.12
     n = len(flows) - 1
     pv_out = -1000.0 / (1.0 + finance_rate) ** 0
-    fv_in = (
-        200.0 * 1.12**3
-        + 300.0 * 1.12**2
-        + 400.0 * 1.12**1
-        + 500.0 * 1.12**0
-    )
+    fv_in = 200.0 * 1.12**3 + 300.0 * 1.12**2 + 400.0 * 1.12**1 + 500.0 * 1.12**0
     expected = (fv_in / -pv_out) ** (1.0 / n) - 1.0
     assert mirr(flows, finance_rate=finance_rate, reinvest_rate=reinvest_rate) == pytest.approx(
         expected
