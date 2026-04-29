@@ -318,7 +318,7 @@ This section collects critiques raised during review that were not resolved by t
 
 1. **The tool produces a verdict that can destroy a sale.** If the audit says "this is bad, renegotiate," the homeowner will act on it. If the audit is wrong (extraction error, missing local-tariff detail), the homeowner may lose a good install or sour on solar entirely. The product's ethical obligation is to be conservative in negative verdicts and transparent about uncertainty.
 2. **"Worth it?" plain-English verdict can be legally fraught depending on phrasing.** "Not worth it" → potential negligent-misrepresentation exposure if wrong. Prefer "Here's what we see" / "Questions to ask" language over imperative verdicts.
-3. **Opt-in default for aggregation** is a closed Phase 1 decision (default OFF; see PRODUCT_PLAN.md). GDPR-safe; trades slower N-ramp on regional benchmarks for clean lawful basis.
+3. **Aggregation default for contribution** is a closed Phase 1 decision: default ON, no Phase 1 UI surface, opt-out plumbing in place (see [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md), which supersedes ADR 0002). Lawful basis under UK GDPR pivots to Art. 6(1)(f) legitimate interests with documented anonymization (ZIP-3/postcode bucketing, no homeowner identifiers, k-anonymity gate). Trades a tighter LIA + UK pre-launch revisit for full-rate moat compounding.
 
 ### Writing / structure (minor)
 

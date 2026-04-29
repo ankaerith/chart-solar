@@ -9,7 +9,7 @@ These four were resolved during the legal review. They are anchors for downstrea
 | # | Decision | Implication |
 |---|---|---|
 | 1 | **PDF retention: extract-and-delete** within 24-72h | `installer_quotes` keeps SHA-256 hash + extracted JSON + audit output. Raw PDF in object storage is auto-purged by a TTL job. Closes the top legal risk (Section F1) and bounds breach radius. |
-| 2 | **Aggregation opt-in: default OFF** | Post-audit prompt invites contribution to the regional benchmark DB; nothing is added without explicit consent. GDPR-clean. Slower N-ramp on regional aggregates is the trade-off (red-team #2 in BUSINESS_PLAN.md). |
+| 2 | **Aggregation default ON, no Phase 1 UI, opt-out plumbing in place** (revised — see [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md), supersedes [ADR 0002](docs/adr/0002-aggregation-default-off.md)) | New audits write `aggregation_opt_in=true` on insert; no consent prompt or toggle in Phase 1 UI. `users.aggregation_opt_out` column + `PATCH /api/me/aggregation` endpoint land from day 1 so a future settings page can surface the control without schema work; flipping cascades to mark all the user's existing `installer_quotes.aggregation_opt_in=false`. Lawful basis pivots from Art. 6(1)(a) consent → Art. 6(1)(f) legitimate interests; anonymization (ZIP-3 / postcode-district bucket only, no homeowner identifiers, rep direct contact PII stripped, k-anonymity gate at publish) is load-bearing. UK Phase 3b revisits the default before launch. |
 | 3 | **LLM vendor: Vertex AI Gemini, single-vendor at start** | Gemini 2.5 Flash on Vertex AI as primary extractor with ZDR configured. Claude fallback router deferred (re-introduce if extraction quality plateau or vendor outage exposure justifies). Single DPA, single ZDR posture, simpler ops. |
 | 4 | **E&O insurance: deferred at Phase 1 launch** | Not bound for MVP audits. Calendar trigger to bind a policy: before Phase 5 public-launch push, or at 50 paid audits/month, whichever first. AI-assistance + not-financial-advice disclaimer on every audit report from day 1 (independent of insurance status). |
 
@@ -251,7 +251,7 @@ This pattern runs identically on Fly.io, Fargate, or any container host. No prov
 5. **Hourly battery dispatch** (Decision Pack): 8760-hour simulation with TOU arbitrage, NEM 3.0 / Agile Outgoing aware
 6. **TOU + export tariff modeling** (Decision Pack): US TOU library + UK Agile half-hourly
 7. **Incentives engine** (US state credits / SRECs / utility rebates, UK SEG + VAT 0% cliff + green mortgages) — DSIRE integration deferred until Decision Pack depth phase pending CC-BY-SA review (see LEGAL_CONSIDERATIONS.md Section A)
-8. **Regional pricing benchmarks** (public, all tiers) — "Median $/W in your ZIP: $3.41" powered by the audit DB. Free users get benchmarks; Decision Pack gets the full audit. **Slower N-ramp expected** because aggregation is opt-in (default OFF).
+8. **Regional pricing benchmarks** (public, all tiers) — "Median $/W in your ZIP: $3.41" powered by the audit DB. Free users get benchmarks; Decision Pack gets the full audit. Aggregation is default-ON with no Phase 1 UI surface (per [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md)); opt-out plumbing exists in API + data model from day 1. K-anonymity gate (chart-solar-5ww) gates publishing.
 9. **Methodology export** (PDF showing every assumption + source)
 10. **Anonymous → save flow** (results persist in localStorage; sign-up migrates to Postgres)
 
@@ -262,7 +262,7 @@ Explicitly out of MVP: multi-property, EV/heat-pump load modeling (defaults only
 **Why this is the primary Phase 1 feature:**
 - It's the most visceral wedge: a homeowner with a $25k quote in hand has immediate, acute need. Conversion intent from that state dwarfs generic "help me think about solar."
 - It's the most viral: users screenshot / share "my installer said 14,000 kWh, this tool said 11,200 — saved me $8k" testimonials.
-- It's the most defensible: the regional quote DB compounds from day 1 (slowed by opt-in default OFF, but compounding nonetheless) and a late-comer cannot retroactively catch up to historical quote volume. This is the product's long-term moat.
+- It's the most defensible: the regional quote DB compounds from day 1 (default-ON aggregation per [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md)) and a late-comer cannot retroactively catch up to historical quote volume. This is the product's long-term moat.
 - It's SEO gold: per-ZIP / per-postcode / per-installer pages backed by real data (once N is sufficient), drawing high-intent searches.
 - It integrates the rest of the product naturally: a user who just got their proposal audited is perfectly primed to buy Decision Pack ($79) to run their own scenarios, and to subscribe to Tracker ($9/mo) post-install to verify delivery.
 
@@ -278,7 +278,7 @@ Explicitly out of MVP: multi-property, EV/heat-pump load modeling (defaults only
 7. Per-bid Variance Report + (if multiple) Cross-bid Comparison Table
 8. BOM alternative suggestions (Phase 1 = heuristic rules: flag aggressive DC:AC ratio, oversized battery for TOU profile, short panel warranty, outlier adder pricing; deeper spec-level alternatives defer to a future Equipment DB)
 9. Ask-your-installer question list, non-accusatory, sourced
-10. Post-audit prompt: "Contribute anonymized pricing to the regional benchmark DB?" — explicit opt-in, default OFF (per Phase 1 closed decisions). Clear copy on what is shared and what is not.
+10. No Phase 1 UI prompt. Aggregation contribution is default-ON (per [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md)); the privacy policy is the single source of truth on this from launch. Future opt-out toggle lands in /settings as a follow-up; the API + data-model plumbing is already in place.
 11. Save audit to account; revisit anytime
 12. Raw PDF auto-purged within 24-72h (TTL job); extracted JSON + audit output persist
 ```
@@ -353,7 +353,7 @@ Asymmetric by design:
 - **Raw PDF retention: extract-and-delete (24-72h TTL)** per Phase 1 closed decisions. After extraction, the PDF is purged from object storage by a TTL job; we keep SHA-256 hash + extracted JSON + audit output. Users can also explicitly delete extracted records.
 - **Installers are retained in full detail**, because that's the point of the DB. Name, license #, physical address, contact info. Sales-rep direct contact PII (phone, email) is stripped at extraction per LEGAL_CONSIDERATIONS.md F1; only rep name + company-level data retained. Stored internally. **NOT exposed publicly at launch** — no leaderboards, no named comparisons, no "Installer X overstates by 14%" pages. Eventually used to drive aggregate region/ZIP trends, and much later (post-legal-review, post-threshold) for transparency disclosures, but default is "we know, we don't say."
 - **Regional aggregates (no installer names)** are exposed: "Median $/W in ZIP 98053 = $3.41 across N=47 quotes". This is the public fruit of the DB. Feeds the landing page and SEO per-ZIP pages.
-- **Aggregation is opt-in (default OFF)** per Phase 1 closed decisions. Post-audit prompt invites contribution; nothing is added without consent.
+- **Aggregation is default-ON with no Phase 1 UI** per [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md). Lawful basis is Art. 6(1)(f) legitimate interests; anonymization is load-bearing. Opt-out plumbing (`users.aggregation_opt_out` + `PATCH /api/me/aggregation` + cascade) is wired from day 1; user-facing toggle deferred to a future settings page.
 
 **Data model (Postgres):**
 
@@ -395,7 +395,7 @@ installer_quotes (                    -- one row per uploaded proposal PDF; inst
   our_forecast jsonb                   -- year-1 kWh, 20-yr savings, variance per line
   variance_score                       -- summary 0-100
 
-  aggregation_opt_in boolean default false   -- Phase 1 closed decision: default OFF
+  aggregation_opt_in boolean not null default true   -- per ADR 0005: default ON; per-user opt-out cascades to flip these
 )
 
 installers (                          -- canonical registry, retained in full
@@ -436,11 +436,11 @@ user_pii_vault (                       -- isolated table; can be purged independ
 - Users: we only retain what's needed for forecasting. No street address stored alongside your audit — only a ZIP-3 / postcode district bucket. Your name/email are in a separate vault you can delete at any time without losing the audit itself.
 - Raw PDFs are auto-purged within 24-72 hours of upload. The extracted data and your audit results persist. You can also explicitly delete the extracted record at any time.
 - Installer data (names, license numbers, quote details) is retained in full, **internally**. Sales-rep direct contact info is not stored. We do not expose named installer statistics at launch. Regional aggregates by ZIP/postcode are exposed; specific installer call-outs are not.
-- Aggregation is **opt-in** (default OFF). After your audit, we ask whether you'd like to contribute anonymized pricing to the regional benchmark DB. Either choice is fine and reversible.
+- Aggregation is **default ON** with no Phase 1 UI surface. By default, anonymized pricing from your audit (location bucket, system spec, financials, quoted metrics — never your name, address, or contact info) contributes to the regional benchmark DB. Opt-out is plumbed in from day 1 (a future settings page surfaces the control); contact us in the meantime to opt out.
 - No sale of data to lead generators. Ever. Part of the pledge.
 - When/if we eventually publish named installer stats, it will be post-legal-review, with a right-to-respond portal, with clear methodology — not at launch.
 
-**Moat compounding:** Each opted-in Phase 1 audit contributes one data point to the installer DB and one to regional aggregates. Default-OFF aggregation slows N-ramp relative to default-ON; mitigation is post-audit copy that earns opt-in (transparency about what is and isn't shared, plus the visible value the user just received from the audit). Combined with Track (actual production data per installer), the internal dataset becomes the industry's most complete installer accountability record — quietly held, available to drive product (BOM suggestions, regional benchmarks) long before it's ever published.
+**Moat compounding:** Each Phase 1 audit contributes one data point to the installer DB and one to regional aggregates. Default-ON aggregation (per ADR 0005) compounds at the full rate of audit volume rather than the opt-in conversion rate; the lawful basis pivots to Art. 6(1)(f) legitimate interests with documented anonymization as the load-bearing mitigation. Combined with Track (actual production data per installer), the internal dataset becomes the industry's most complete installer accountability record — quietly held, available to drive product (BOM suggestions, regional benchmarks) long before it's ever published.
 
 ## Files / Patterns to Port from Current Repo
 
@@ -469,7 +469,7 @@ pvlib and hourly 8760 simulation are present from Phase 1 (no separate "engine u
 |---|---|---|
 | 0. Plan + repo setup | Plan approval, new repo, Next.js container scaffold, FastAPI backend scaffold, Postgres, Dockerfiles, Fly.io deploy, CI | 1-2 wks |
 | **1a. Engine + BS-detector plumbing (critical path)** | **pvlib pipeline: irradiance providers (NSRDB/PVGIS/Open-Meteo), DC production, clipping, soiling, temperature, degradation, tariff (flat + TOU + NEM 3.0), finance (loan + NPV + IRR + payback), Monte Carlo wrapper. Port `calculations.py` + `amortization.py` golden-fixture tests from current repo. Async job queue + worker.** | **5-7 wks** |
-| **1b. Proposal Audit MVP (HERO)** | **PDF upload (24-72h TTL purge), Vertex AI Gemini extraction pipeline (fields per inventory; ZDR; inline_data), human-in-the-loop correction UI, variance report, heuristic BOM alternative rules, multi-bid comparison view, `audits` + `installer_quotes` + `installers` + `user_pii_vault` + regional aggregates, installer detail retention (internal only, rep direct PII stripped), opt-in flow (default OFF). Test suite seeded with user's Puget Sound proposal set.** | **5-7 wks** |
+| **1b. Proposal Audit MVP (HERO)** | **PDF upload (24-72h TTL purge), Vertex AI Gemini extraction pipeline (fields per inventory; ZDR; inline_data), human-in-the-loop correction UI, variance report, heuristic BOM alternative rules, multi-bid comparison view, `audits` + `installer_quotes` + `installers` + `user_pii_vault` + regional aggregates, installer detail retention (internal only, rep direct PII stripped), default-ON aggregation + opt-out plumbing (no Phase 1 UI; per [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md)). Test suite seeded with user's Puget Sound proposal set.** | **5-7 wks** |
 | 2. Auth + Stripe | Auth.js or FastAPI-native JWT + magic link, Stripe checkout (Decision Pack + Founders bundle), entitlements layer, save/revisit audits | 2-3 wks |
 | 3a. Decision Pack depth | Scenario diff, battery hourly dispatch (rule-based), TOU tariff refinement, user-configurable discount rate + opportunity-cost overlays, sale-scenario modeling, methodology PDF export, share links, **DSIRE incentives integration (post counsel review)** | 5-7 wks |
 | 3b. UK launch | PVGIS adapter already present; add Octopus Agile simulator, SEG picker, MCS toggle, VAT cliff, green mortgages, £ formatting, UK-format proposal extraction templates | 3-5 wks |
@@ -492,7 +492,7 @@ End-to-end checks for each phase:
 - **Proposal Audit — variance math:** For 10 proposals where we know the actual installed system's year-1 production (from current repo's real data + volunteer users), verify our variance report directionally matches reality (sign + rough magnitude).
 - **PII scrubber:** Automated test — upload a proposal with known PII fields (name, address, signature, sales-rep phone/email), verify the sanitized `installer_quotes` row contains none of them — only ZIP/postcode prefix, company name + license #, and rep name (no rep direct contact info).
 - **PDF retention TTL:** Automated test — upload a proposal, verify raw PDF is purged from object storage within the configured TTL window, and that `raw_pdf_purged_at` timestamp is set on the `installer_quotes` row.
-- **Aggregation opt-in:** Automated test — complete an audit without granting aggregation consent, verify the quote does not appear in `region_pricing_aggregates`. Repeat with consent granted, verify it does appear.
+- **Aggregation default + opt-out:** Automated test — complete an audit; verify the quote appears in `region_pricing_aggregates` (default-ON per [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md)). Then `PATCH /api/me/aggregation` to opt out; verify cascade flips all the user's `installer_quotes.aggregation_opt_in` to false and the next aggregate refresh excludes them. New audits after opt-out also stay excluded.
 - **Data flywheel:** After first 100 opted-in audits, verify regional aggregates compute correctly, benchmarks surface in new audits, no installer appears named until N>20.
 - **Cost monitoring:** Confirm fixed vendor run rate stays on free tiers at baseline traffic; alert if any *unexpected* vendor charge appears. Vertex AI Gemini cost per audit is the dominant variable: budget ≤ $2 per audited bid, with a hard alert at $3 (realistic spend on 2.5 Flash is $0.005-0.05 per 10-page audit, so the budget exists primarily as runaway-detection). Typical user runs 1-3 bids per audit session. Weekly spend-per-audit review.
 - **Security audit:** Before Phase 5 public launch, engage a consultant for a one-time review focused on (a) PDF parser isolation, (b) API authorization boundaries (per-user row-level access in the application layer), (c) PII-vault cryptographic boundary, (d) Stripe webhook signing, (e) share-link tokens. Budget $3-8k. Follow up with quarterly self-review using OWASP ASVS Level 1.

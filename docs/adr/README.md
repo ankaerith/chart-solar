@@ -23,9 +23,10 @@ Don't edit accepted ADRs in place — supersede with a new one and link both dir
 | # | Title | Status |
 |---|---|---|
 | [0001](./0001-pdf-retention-extract-and-delete.md) | PDF retention: extract-and-delete within 24-72h | accepted |
-| [0002](./0002-aggregation-default-off.md) | Aggregation opt-in default OFF | accepted |
+| [0002](./0002-aggregation-default-off.md) | Aggregation opt-in default OFF | superseded by [0005](./0005-aggregation-default-on-no-ui.md) |
 | [0003](./0003-llm-vendor-vertex-ai-gemini.md) | LLM vendor: Vertex AI Gemini, single-vendor at start | accepted |
 | [0004](./0004-eo-insurance-deferred.md) | E&O insurance deferred at Phase 1 launch | accepted |
+| [0005](./0005-aggregation-default-on-no-ui.md) | Aggregation default ON, no Phase 1 UI, opt-out plumbing in place | accepted |
 
 ## Conventions
 

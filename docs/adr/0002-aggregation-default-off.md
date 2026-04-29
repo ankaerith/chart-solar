@@ -2,7 +2,7 @@
 
 **Decision**: After every audit, we ask the user whether to contribute anonymized pricing to the regional benchmark DB. The toggle defaults to OFF. Nothing is added to `region_pricing_aggregates` without explicit consent.
 
-**Status**: accepted
+**Status**: superseded by [0005](./0005-aggregation-default-on-no-ui.md) (2026-04-28). Original text retained below for historical reference.
 
 **Date**: 2026-04-22
 
