@@ -21,6 +21,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from backend.engine.registry import register
+
 DegradationModel = Literal["linear", "geometric"]
 
 #: NREL field-study median for crystalline-silicon residential systems.
@@ -47,6 +49,7 @@ class DegradationCurve(BaseModel):
     factors: list[float] = Field(..., min_length=1)
 
 
+@register("engine.degradation")
 def degradation_factors(
     *,
     years: int,

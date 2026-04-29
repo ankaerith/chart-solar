@@ -28,6 +28,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from backend.engine.registry import register
 from backend.providers.tariff import TariffSchedule, TouPeriod
 
 HOURS_PER_TMY = 8760
@@ -240,3 +241,47 @@ def apply_nem_one_for_one(
         annual_credit=sum(monthly),
         annual_kwh_exported=total_kwh,
     )
+
+
+@register("engine.export_credit")
+def apply_export_credit(
+    *,
+    regime: ExportRegime,
+    hourly_export_kwh: list[float],
+    tariff: TariffSchedule | None = None,
+    hourly_avoided_cost_per_kwh: list[float] | None = None,
+    hourly_rate_per_kwh: list[float] | None = None,
+    rate_per_kwh: float | None = None,
+) -> ExportCreditResult:
+    """Single dispatch entry point for the four export-credit regimes.
+
+    Each regime needs different inputs (NEM 1:1 reads back the import
+    tariff; NBT and SEG-TOU need an hourly rate vector; SEG-flat needs
+    a scalar). The pipeline registers this function under
+    ``engine.export_credit`` and supplies the regime + the matching
+    payload — keeping the registry single-keyed avoids the need to
+    fan ``engine.export_credit.<regime>`` keys through tier configs.
+    """
+    if regime == "nem_one_for_one":
+        if tariff is None:
+            raise ValueError("nem_one_for_one regime requires `tariff`")
+        return apply_nem_one_for_one(hourly_export_kwh=hourly_export_kwh, tariff=tariff)
+    if regime == "nem_three_nbt":
+        if hourly_avoided_cost_per_kwh is None:
+            raise ValueError("nem_three_nbt regime requires `hourly_avoided_cost_per_kwh`")
+        return apply_nem_three_nbt(
+            hourly_export_kwh=hourly_export_kwh,
+            hourly_avoided_cost_per_kwh=hourly_avoided_cost_per_kwh,
+        )
+    if regime == "seg_flat":
+        if rate_per_kwh is None:
+            raise ValueError("seg_flat regime requires `rate_per_kwh`")
+        return apply_seg_flat(hourly_export_kwh=hourly_export_kwh, rate_per_kwh=rate_per_kwh)
+    if regime == "seg_tou":
+        if hourly_rate_per_kwh is None:
+            raise ValueError("seg_tou regime requires `hourly_rate_per_kwh`")
+        return apply_seg_tou(
+            hourly_export_kwh=hourly_export_kwh,
+            hourly_rate_per_kwh=hourly_rate_per_kwh,
+        )
+    raise ValueError(f"unknown export-credit regime: {regime!r}")
