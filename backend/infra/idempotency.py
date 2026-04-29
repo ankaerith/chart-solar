@@ -102,6 +102,76 @@ async def _save(
     await session.commit()
 
 
+async def lookup_idempotency_response(
+    session: AsyncSession,
+    *,
+    route: str,
+    key: str,
+    now: datetime | None = None,
+) -> dict[str, Any] | None:
+    """Return the cached response body for ``(route, key)`` if non-expired.
+
+    Public facade over ``_lookup`` for callers that derive the
+    idempotency key from the request body rather than a header — they
+    don't need direct ORM access, just the cached response bytes.
+    """
+    row = await _lookup(session, route, key, now or datetime.now(UTC))
+    if row is None:
+        return None
+    return dict(row.response_body)
+
+
+async def claim_idempotency_slot(
+    session: AsyncSession,
+    *,
+    route: str,
+    key: str,
+    request_hash: str,
+    response_body: dict[str, Any],
+    response_status: int = 200,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Atomically claim ``(route, key)`` with ``response_body``.
+
+    Returns the body that *won* the race — either ``response_body`` (we
+    won) or whatever the prior writer cached (we lost). The claim-first
+    pattern lets callers run side effects (enqueueing a job, charging
+    a card) only on the won path while still serving consistent
+    responses to losers.
+
+    The route + key tuple is the unique constraint; ``ON CONFLICT DO
+    NOTHING`` makes this safe under concurrent same-key writes.
+    """
+    when = now or datetime.now(UTC)
+    stmt = (
+        pg_insert(IdempotencyKey)
+        .values(
+            key=key,
+            route=route,
+            request_hash=request_hash,
+            response_status=response_status,
+            response_body=response_body,
+            expires_at=when + timedelta(seconds=ttl_seconds),
+        )
+        .on_conflict_do_nothing(index_elements=["key", "route"])
+        .returning(IdempotencyKey.key)
+    )
+    result = await session.execute(stmt)
+    won = result.scalar_one_or_none() is not None
+    await session.commit()
+    if won:
+        return response_body
+    existing = await lookup_idempotency_response(session, route=route, key=key, now=when)
+    if existing is None:
+        # Pathological: row was inserted then expired between our INSERT
+        # and our follow-up SELECT. Caller's response is still
+        # well-defined — we never ran the side effect on this code path,
+        # so returning the would-be response is the next-best behaviour.
+        return response_body
+    return existing
+
+
 def idempotent(
     *,
     route_key: str,
@@ -246,6 +316,8 @@ __all__ = [
     "DEFAULT_TTL_SECONDS",
     "IDEMPOTENCY_HEADER",
     "canonical_request_hash",
+    "claim_idempotency_slot",
     "idempotent",
+    "lookup_idempotency_response",
     "record_stripe_event",
 ]

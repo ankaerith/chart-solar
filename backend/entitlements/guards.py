@@ -20,6 +20,26 @@ def current_tier() -> Tier:
     return Tier.FREE
 
 
+#: Stable identifier for the unauthenticated (Phase 0/1) caller. Picked
+#: as a literal string rather than ``None`` so storage lookups always
+#: have a non-empty namespace key — under any future auth shim, real
+#: user IDs will simply replace this constant via ``dependency_overrides``.
+ANONYMOUS_USER_ID = "anonymous"
+
+
+def current_user_id() -> str:
+    """Caller's user identifier — placeholder until auth lands.
+
+    Mirror of ``current_tier``: the API uses this as a FastAPI Depends
+    so request-scoped resources (idempotency namespaces, audit ownership)
+    have a stable key today and can swap to a real auth-bound id Phase 2
+    without touching call sites. Tests override via
+    ``app.dependency_overrides[current_user_id]`` to simulate distinct
+    callers.
+    """
+    return ANONYMOUS_USER_ID
+
+
 def require_feature(feature_key: str) -> Callable[..., None]:
     """Return a FastAPI dependency that 402s if the caller's tier is too low.
 
