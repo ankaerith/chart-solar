@@ -323,7 +323,7 @@ Use **Gemini 2.5 Flash on Vertex AI (ZDR configured)** as the primary extraction
 
 ## Section H — Pre-launch action items (consolidated)
 
-> **Phase 1 closed decisions** (cross-ref `PRODUCT_PLAN.md` top section): (1) extract-and-delete PDF retention 24-72h; (2) aggregation opt-in default OFF; (3) Vertex AI Gemini single-vendor at start (Claude fallback deferred); (4) E&O insurance deferred at Phase 1 launch with calendar trigger before Phase 5 or 50 paid audits/mo. Items below reflect those choices.
+> **Phase 1 closed decisions** (cross-ref `PRODUCT_PLAN.md` top section): (1) extract-and-delete PDF retention 24-72h; (2) aggregation default ON, no Phase 1 UI, opt-out plumbing in place — lawful basis Art. 6(1)(f) legitimate interests with documented anonymization (revised; see [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md), supersedes [ADR 0002](docs/adr/0002-aggregation-default-off.md)); (3) Vertex AI Gemini single-vendor at start (Claude fallback deferred); (4) E&O insurance deferred at Phase 1 launch with calendar trigger before Phase 5 or 50 paid audits/mo. Items below reflect those choices.
 
 ### Architecture
 - [x] **Extract-and-delete PDF retention** *(closed — Phase 1 decision)*: structured extraction within 24-72h, then purge raw PDF; keep SHA-256 hash + extracted facts + audit output only.
@@ -349,7 +349,7 @@ Use **Gemini 2.5 Flash on Vertex AI (ZDR configured)** as the primary extraction
 
 ### Legal / compliance
 - [ ] **AI-assistance + not-financial-advice disclaimer** on every audit report and exported PDF (general transparency / liability posture; not AUP-mandatory under extraction-only architecture).
-- [x] **Privacy policy + ToS** *(aggregation default closed — Phase 1 decision: opt-in default OFF)*: user warrants right to share proposal; post-audit prompt invites contribution to regional benchmark DB; data-deletion mechanism for raw PDF + PII vault.
+- [x] **Privacy policy + ToS** *(aggregation default closed — Phase 1 decision: default ON with no UI surface, opt-out plumbing in place; lawful basis Art. 6(1)(f); see [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md))*: user warrants right to share proposal; privacy policy describes default-ON aggregation explicitly with the opt-out path; data-deletion mechanism for raw PDF + PII vault.
 - [ ] **GDPR DPA + Art. 6 lawful-basis documentation** for installer-rep data and smart-meter data.
 - [ ] **DPIA before reviving** named-installer or named-rep public analytics.
 - [ ] **E&O / tech-liability insurance** *(deferred — Phase 1 decision)*: not bound at MVP launch. Calendar trigger to bind a policy: before Phase 5 public-launch push, or at 50 paid audits/month, whichever first. AI-assistance + not-financial-advice disclaimer on every audit report from day 1 (independent of insurance status).
@@ -368,7 +368,7 @@ Use **Gemini 2.5 Flash on Vertex AI (ZDR configured)** as the primary extraction
 
 1. **DSIRE CC-BY-SA contamination boundary**: at what level of integration does ShareAlike attach to our incentive tables? Is "display with attribution and link to license" sufficient to keep our proprietary curated DB outside the copyleft scope?
 2. **Extraction-only scope vs. LLM vendor AUPs** — confirm our reading that Anthropic's High-Risk "investment advice / financial eligibility" clause, Google's "automated decisions in high-risk domains" clause, and OpenAI's "personalized professional advice" clause all target what the Service produces (recommendations/decisions), and therefore do not attach when the LLM only extracts structured fields and a deterministic engine computes the audit. Edge case to pressure-test: LLM-generated flags and ask-your-installer questions grounded in deterministic counterfactual values (PRODUCT_PLAN.md §Cognition Architecture) — are those still "extraction/explanation" or do they cross into "advice"?
-3. **Aggregation default OFF vs. ON** under GDPR. Plan currently defaults to ON; UK ICO interpretation increasingly treats pre-ticked consent as invalid. Confirm.
+3. **Aggregation default ON, lawful basis Art. 6(1)(f) legitimate interests** ([ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md), supersedes [ADR 0002](docs/adr/0002-aggregation-default-off.md)) — confirm the LIA holds under UK ICO scrutiny given the anonymization design (ZIP-3/postcode-district bucketing, no homeowner identifiers, rep contact PII stripped, k-anonymity gate at publish). If UK ICO posture is hostile to default-ON, options: per-region default flag (US default-ON, UK default-OFF) or UK-specific consent prompt while keeping US default-ON. Mandatory pre-Phase-3b counsel review.
 4. **Sales-rep PII lawful basis**: legitimate-interest defensibility for retaining individual rep names + license #s in our installer DB (internal-only, pre-public-disclosure threshold). Required DPIA structure.
 5. **Installer "no-share" / confidentiality footers**: confirm our position that footer declarations don't bind a homeowner who never signed; confirm we have no tortious-interference exposure absent specific-contract knowledge.
 6. **Named-installer disclosure threshold** (currently N≥20 in plan): is N=20 + right-to-respond enough to defend defamation/trade-libel? What jurisdictions are highest-risk?

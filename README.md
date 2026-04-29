@@ -29,6 +29,12 @@ uv run pytest                                           # Backend tests
 
 API at http://localhost:8000/api/health · Web at http://localhost:3000
 
+## Engineering docs
+
+- [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — Definition of Done, repo layout, testing strategy, operational expectations.
+- [`docs/adr/`](docs/adr/) — Architecture Decision Records (Phase 1 closed decisions and beyond).
+- [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) — PR checklist mirroring DoD.
+
 ## Next
 
 Phase 1a: pvlib pipeline, irradiance providers (NSRDB / PVGIS / Open-Meteo), tariff (flat + TOU + NEM 3.0), finance, Monte Carlo. See `PRODUCT_PLAN.md` § Phased Roadmap.
