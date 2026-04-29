@@ -9,11 +9,9 @@ forecast.
 
 Cell-temperature derating is applied here implicitly via PVWatts's
 default cell-temp model (SAPM `open_rack_glass_glass`). The
-`engine.cell_temperature` step (chart-solar-p9l) layers an explicit
-per-hour override on top when the user has detailed module specs;
-likewise, `engine.clipping` (chart-solar-5qe) reapplies a tighter
-inverter-saturation curve on the AC array. Both are post-step
-modifiers — this step only does the base ModelChain run.
+`engine.cell_temperature` and `engine.clipping` steps layer per-hour
+overrides on top when extraction surfaces enough detail to override
+the defaults; this step only does the base ModelChain run.
 """
 
 from __future__ import annotations
@@ -139,8 +137,8 @@ def run_dc_production(
     mc = ModelChain.with_pvwatts(pv_system, location)
     mc.run_model(weather)
 
-    dc_kw = (_coerce_to_series(mc.results.dc, index) / 1000.0).clip(lower=0.0)
-    ac_kw = (_coerce_to_series(mc.results.ac, index) / 1000.0).clip(lower=0.0)
+    dc_kw = (_aligned_w_series(mc.results.dc, index) / 1000.0).clip(lower=0.0)
+    ac_kw = (_aligned_w_series(mc.results.ac, index) / 1000.0).clip(lower=0.0)
 
     return DcProductionResult(
         hourly_dc_kw=dc_kw.tolist(),
@@ -153,17 +151,10 @@ def run_dc_production(
     )
 
 
-def _coerce_to_series(value: object, index: pd.DatetimeIndex) -> pd.Series:
-    """ModelChain's ``results.dc`` is sometimes a DataFrame (when the
-    PV array exposes per-cell power columns) and sometimes a Series.
-    Pull a single watts-of-power series either way."""
-    if isinstance(value, pd.DataFrame):
-        if "p_mp" in value.columns:
-            series = value["p_mp"]
-        else:
-            series = value.sum(axis=1)
-    elif isinstance(value, pd.Series):
-        series = value
-    else:
+def _aligned_w_series(value: object, index: pd.DatetimeIndex) -> pd.Series:
+    """PVWatts ModelChain returns a Series for both `.dc` and `.ac`;
+    reindex defensively so a future pvlib upgrade that drops a row
+    fills with 0 rather than NaN."""
+    if not isinstance(value, pd.Series):
         raise TypeError(f"unexpected ModelChain result type: {type(value).__name__}")
-    return series.reindex(index).fillna(0.0).astype(float)
+    return value.reindex(index).fillna(0.0).astype(float)
