@@ -46,14 +46,30 @@ def _async_db_uses_null_pool() -> Iterator[None]:
         async with test_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
+    async def _drop_schema() -> None:
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        await test_engine.dispose()
+
+    schema_was_created = False
     try:
         asyncio.run(_create_schema())
+        schema_was_created = True
     except Exception:
         # If Postgres is unreachable, individual tests skip themselves;
         # don't fail the whole session here.
         pass
 
     yield
+
+    if schema_was_created:
+        # Clean up so the alembic round-trip step (CI runs it after
+        # pytest) sees an empty database — otherwise the migration's
+        # CREATE TABLE collides with the test-time create_all schema.
+        try:
+            asyncio.run(_drop_schema())
+        except Exception:
+            pass
 
 
 @pytest.fixture
