@@ -21,7 +21,11 @@ headline number for sites with non-trivial snow.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+SnowBand = Literal["no-snow", "temperate-winter", "cold-winter", "subarctic"]
 
 #: Below this latitude, snow loss is treated as zero (default: ATL,
 #: Phoenix, Houston don't see panel-blocking snow). Caller can pass
@@ -32,13 +36,20 @@ DEFAULT_SNOW_THRESHOLD_LAT: float = 35.0
 #: snow accumulates. Empirically supported by Marion et al. 2013.
 NATURAL_SHED_TILT_DEG: float = 40.0
 
+#: Below this tilt, no shedding benefit at all.
+NO_SHED_TILT_DEG: float = 25.0
+
+#: Loss reduction at full natural shedding — caps the tilt benefit so
+#: a 60° array doesn't double-credit beyond what Marion's data supports.
+MAX_SHED_REDUCTION: float = 0.5
+
 #: 12-month *loss* fractions (Jan..Dec) — these are subtracted from 1
 #: to produce derate factors. Bands are coarse climate envelopes:
 #:
 #: * lat 35-45°: temperate-winter (Boulder, Pittsburgh, Boston)
 #: * lat 45-55°: cold-winter (Minneapolis, Calgary, southern Sweden)
 #: * lat >55°:   subarctic (Anchorage, Stockholm, Helsinki)
-LAT_BAND_LOSS_FRACTIONS: dict[str, tuple[float, ...]] = {
+LAT_BAND_LOSS_FRACTIONS: dict[SnowBand, tuple[float, ...]] = {
     "temperate-winter": (
         0.08, 0.05, 0.02, 0.0, 0.0, 0.0,
         0.0, 0.0, 0.0, 0.0, 0.02, 0.06,
@@ -59,15 +70,15 @@ class SnowLossCurve(BaseModel):
 
     lat: float
     tilt_deg: float
-    band: str
+    band: SnowBand
     monthly_factors: list[float] = Field(..., min_length=12, max_length=12)
     annual_avg_factor: float = Field(..., ge=0.0, le=1.0)
 
 
-def _lat_band(lat: float) -> str | None:
+def _lat_band(lat: float, *, threshold: float) -> SnowBand:
     abs_lat = abs(lat)
-    if abs_lat < DEFAULT_SNOW_THRESHOLD_LAT:
-        return None
+    if abs_lat < threshold:
+        return "no-snow"
     if abs_lat < 45.0:
         return "temperate-winter"
     if abs_lat < 55.0:
@@ -79,17 +90,16 @@ def _tilt_shed_factor(tilt_deg: float) -> float:
     """Multiplicative reduction in snow loss from a steep array.
 
     At tilts ≥ ``NATURAL_SHED_TILT_DEG`` (40°), snow sheds within
-    hours; we model this as 50 % loss reduction. Between 25° and 40°
-    we linearly interpolate, and below 25° we apply no reduction.
-    The numbers are Marion et al. 2013-shaped — pinning to ±5 % is
-    reasonable.
+    hours; we model this as ``MAX_SHED_REDUCTION`` (50 %) loss
+    reduction. Between ``NO_SHED_TILT_DEG`` (25°) and 40° we linearly
+    interpolate. Marion et al. 2013-shaped; ±5 % is the right precision.
     """
     if tilt_deg >= NATURAL_SHED_TILT_DEG:
-        return 0.5
-    if tilt_deg <= 25.0:
+        return 1.0 - MAX_SHED_REDUCTION
+    if tilt_deg <= NO_SHED_TILT_DEG:
         return 1.0
-    fraction = (tilt_deg - 25.0) / (NATURAL_SHED_TILT_DEG - 25.0)
-    return 1.0 - fraction * 0.5
+    fraction = (tilt_deg - NO_SHED_TILT_DEG) / (NATURAL_SHED_TILT_DEG - NO_SHED_TILT_DEG)
+    return 1.0 - fraction * MAX_SHED_REDUCTION
 
 
 def snow_loss_curve(
@@ -109,30 +119,18 @@ def snow_loss_curve(
     if not 0.0 <= tilt_deg <= 90.0:
         raise ValueError("tilt_deg must be in [0, 90]")
 
-    if abs(lat) < snow_threshold_lat:
-        # No snow loss south of the threshold.
+    band = _lat_band(lat, threshold=snow_threshold_lat)
+    if band == "no-snow":
         factors = [1.0] * 12
-        return SnowLossCurve(
-            lat=lat,
-            tilt_deg=tilt_deg,
-            band="no-snow",
-            monthly_factors=factors,
-            annual_avg_factor=1.0,
-        )
-
-    band = _lat_band(lat)
-    assert band is not None  # _lat_band only returns None below threshold
-    base_losses = LAT_BAND_LOSS_FRACTIONS[band]
-    shed = _tilt_shed_factor(tilt_deg)
-    adjusted_losses = [loss * shed for loss in base_losses]
-    factors = [1.0 - loss for loss in adjusted_losses]
-    avg = sum(factors) / 12.0
+    else:
+        shed = _tilt_shed_factor(tilt_deg)
+        factors = [1.0 - loss * shed for loss in LAT_BAND_LOSS_FRACTIONS[band]]
     return SnowLossCurve(
         lat=lat,
         tilt_deg=tilt_deg,
         band=band,
         monthly_factors=factors,
-        annual_avg_factor=avg,
+        annual_avg_factor=sum(factors) / 12.0,
     )
 
 
