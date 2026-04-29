@@ -73,6 +73,32 @@ async def _lookup(
     return result.scalar_one_or_none()
 
 
+def _claim_insert_stmt(
+    *,
+    route: str,
+    key: str,
+    request_hash: str,
+    response_status: int,
+    response_body: dict[str, Any],
+    expires_at: datetime,
+    returning: bool,
+) -> Any:
+    """Shared ``INSERT … ON CONFLICT (key, route) DO NOTHING`` builder."""
+    stmt = (
+        pg_insert(IdempotencyKey)
+        .values(
+            key=key,
+            route=route,
+            request_hash=request_hash,
+            response_status=response_status,
+            response_body=response_body,
+            expires_at=expires_at,
+        )
+        .on_conflict_do_nothing(index_elements=["key", "route"])
+    )
+    return stmt.returning(IdempotencyKey.key) if returning else stmt
+
+
 async def _save(
     session: AsyncSession,
     *,
@@ -86,19 +112,17 @@ async def _save(
 ) -> None:
     """Insert the response row. Concurrent inserts race-lose harmlessly:
     `ON CONFLICT (key, route) DO NOTHING` keeps the first writer's payload."""
-    stmt = (
-        pg_insert(IdempotencyKey)
-        .values(
-            key=key,
+    await session.execute(
+        _claim_insert_stmt(
             route=route,
+            key=key,
             request_hash=request_hash,
             response_status=response_status,
             response_body=response_body,
             expires_at=now + timedelta(seconds=ttl_seconds),
+            returning=False,
         )
-        .on_conflict_do_nothing(index_elements=["key", "route"])
     )
-    await session.execute(stmt)
     await session.commit()
 
 
@@ -131,45 +155,38 @@ async def claim_idempotency_slot(
     response_status: int = 200,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
     now: datetime | None = None,
-) -> dict[str, Any]:
+) -> tuple[bool, dict[str, Any]]:
     """Atomically claim ``(route, key)`` with ``response_body``.
 
-    Returns the body that *won* the race — either ``response_body`` (we
-    won) or whatever the prior writer cached (we lost). The claim-first
-    pattern lets callers run side effects (enqueueing a job, charging
-    a card) only on the won path while still serving consistent
-    responses to losers.
-
-    The route + key tuple is the unique constraint; ``ON CONFLICT DO
-    NOTHING`` makes this safe under concurrent same-key writes.
+    Returns ``(won, body)``: ``won`` is True iff this call inserted the
+    row (the caller should now run its side effect — enqueue a job,
+    charge a card — and return ``body``); ``won`` is False on a race
+    loss, in which case ``body`` is the prior writer's cached response.
     """
     when = now or datetime.now(UTC)
-    stmt = (
-        pg_insert(IdempotencyKey)
-        .values(
-            key=key,
+    result = await session.execute(
+        _claim_insert_stmt(
             route=route,
+            key=key,
             request_hash=request_hash,
             response_status=response_status,
             response_body=response_body,
             expires_at=when + timedelta(seconds=ttl_seconds),
+            returning=True,
         )
-        .on_conflict_do_nothing(index_elements=["key", "route"])
-        .returning(IdempotencyKey.key)
     )
-    result = await session.execute(stmt)
     won = result.scalar_one_or_none() is not None
     await session.commit()
     if won:
-        return response_body
+        return True, response_body
     existing = await lookup_idempotency_response(session, route=route, key=key, now=when)
     if existing is None:
         # Pathological: row was inserted then expired between our INSERT
-        # and our follow-up SELECT. Caller's response is still
-        # well-defined — we never ran the side effect on this code path,
-        # so returning the would-be response is the next-best behaviour.
-        return response_body
-    return existing
+        # and our follow-up SELECT. We never ran the side effect on this
+        # code path, so returning the would-be response is the next-best
+        # behaviour.
+        return False, response_body
+    return False, existing
 
 
 def idempotent(

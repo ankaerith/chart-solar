@@ -8,23 +8,20 @@ degenerate forms (no consumption ⇒ all production exports; no tariff
 schedule ⇒ tariff + export-credit steps are skipped).
 """
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
+from backend.engine.types import ExportRegime
 from backend.providers.irradiance import HOURS_PER_TMY
 from backend.providers.tariff import TariffSchedule
 
-#: Mirrors ``backend.engine.steps.export_credit.ExportRegime``. Inlined
-#: here to break the import cycle ``inputs ↔ steps.dc_production``;
-#: kept identical by string match — both Literals must list the same
-#: regime names. The cross-test in ``test_engine_pipeline`` exercises
-#: every regime, surfacing drift if either side changes.
-ExportRegime = Literal[
-    "nem_one_for_one",
-    "nem_three_nbt",
-    "seg_flat",
-    "seg_tou",
+__all__ = [
+    "ConsumptionInputs",
+    "ExportCreditInputs",
+    "ExportRegime",
+    "FinancialInputs",
+    "ForecastInputs",
+    "SystemInputs",
+    "TariffInputs",
 ]
 
 

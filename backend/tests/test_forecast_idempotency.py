@@ -23,7 +23,7 @@ from unittest.mock import patch
 import asyncpg
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 from sqlalchemy.exc import OperationalError
 
 import backend.database as _db
@@ -34,10 +34,12 @@ from backend.main import app
 
 @pytest.fixture(scope="module", autouse=True)
 async def _require_postgres() -> None:
+    """Skip the module if Postgres is unreachable. Cleanup of the
+    ``idempotency_keys`` table is the per-test ``clean_idempotency``
+    fixture's job, so this probe stays as cheap as ``SELECT 1``."""
     try:
         async with _db.SessionLocal() as session:
-            await session.execute(delete(IdempotencyKey))
-            await session.commit()
+            await session.execute(text("SELECT 1"))
     except (OperationalError, asyncpg.exceptions.PostgresError, ConnectionError, OSError) as exc:
         pytest.skip(f"Postgres not reachable at DATABASE_URL: {exc}")
 
