@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import forecast, health, irradiance
+from backend.api import entitlements, forecast, health, irradiance
 from backend.config import settings
 from backend.infra.logging import configure_logging
 from backend.infra.middleware import CorrelationIdMiddleware
@@ -35,3 +35,4 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api")
 app.include_router(forecast.router, prefix="/api")
 app.include_router(irradiance.router, prefix="/api")
+app.include_router(entitlements.router, prefix="/api")
