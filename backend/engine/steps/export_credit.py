@@ -63,9 +63,7 @@ class ExportCreditResult(BaseModel):
 
 def _validate_hourly(hourly: list[float], *, name: str) -> None:
     if len(hourly) != HOURS_PER_TMY:
-        raise ValueError(
-            f"{name} must be {HOURS_PER_TMY} entries (got {len(hourly)})"
-        )
+        raise ValueError(f"{name} must be {HOURS_PER_TMY} entries (got {len(hourly)})")
 
 
 def _matching_tou_rate(
@@ -117,9 +115,7 @@ def apply_nem_three_nbt(
     """
     _validate_hourly(hourly_export_kwh, name="hourly_export_kwh")
     _validate_hourly(hourly_avoided_cost_per_kwh, name="hourly_avoided_cost_per_kwh")
-    monthly, total_kwh = _accumulate_monthly_credits(
-        hourly_export_kwh, hourly_avoided_cost_per_kwh
-    )
+    monthly, total_kwh = _accumulate_monthly_credits(hourly_export_kwh, hourly_avoided_cost_per_kwh)
     return ExportCreditResult(
         regime="nem_three_nbt",
         monthly_credit=monthly,
@@ -163,9 +159,7 @@ def apply_seg_tou(
     """
     _validate_hourly(hourly_export_kwh, name="hourly_export_kwh")
     _validate_hourly(hourly_rate_per_kwh, name="hourly_rate_per_kwh")
-    monthly, total_kwh = _accumulate_monthly_credits(
-        hourly_export_kwh, hourly_rate_per_kwh
-    )
+    monthly, total_kwh = _accumulate_monthly_credits(hourly_export_kwh, hourly_rate_per_kwh)
     return ExportCreditResult(
         regime="seg_tou",
         monthly_credit=monthly,

@@ -21,8 +21,13 @@ from backend.providers.tariff import (
 
 def _flat_tariff(rate: float = 0.30) -> TariffSchedule:
     return TariffSchedule(
-        name="flat", utility="u", country="US", currency="USD",
-        structure="flat", fixed_monthly_charge=0.0, flat_rate_per_kwh=rate,
+        name="flat",
+        utility="u",
+        country="US",
+        currency="USD",
+        structure="flat",
+        fixed_monthly_charge=0.0,
+        flat_rate_per_kwh=rate,
     )
 
 
@@ -32,23 +37,46 @@ def _tou_tariff() -> TariffSchedule:
         peak[h] = True
     off = [not h for h in peak]
     return TariffSchedule(
-        name="tou", utility="u", country="US", currency="USD",
-        structure="tou", fixed_monthly_charge=0.0,
+        name="tou",
+        utility="u",
+        country="US",
+        currency="USD",
+        structure="tou",
+        fixed_monthly_charge=0.0,
         tou_periods=[
-            TouPeriod(name="peak", rate_per_kwh=0.45,
-                      months=list(range(1, 13)), hour_mask=peak, is_weekday=True),
-            TouPeriod(name="off", rate_per_kwh=0.15,
-                      months=list(range(1, 13)), hour_mask=off, is_weekday=True),
-            TouPeriod(name="weekend", rate_per_kwh=0.18,
-                      months=list(range(1, 13)), hour_mask=[True] * 24, is_weekday=False),
+            TouPeriod(
+                name="peak",
+                rate_per_kwh=0.45,
+                months=list(range(1, 13)),
+                hour_mask=peak,
+                is_weekday=True,
+            ),
+            TouPeriod(
+                name="off",
+                rate_per_kwh=0.15,
+                months=list(range(1, 13)),
+                hour_mask=off,
+                is_weekday=True,
+            ),
+            TouPeriod(
+                name="weekend",
+                rate_per_kwh=0.18,
+                months=list(range(1, 13)),
+                hour_mask=[True] * 24,
+                is_weekday=False,
+            ),
         ],
     )
 
 
 def _tiered_tariff() -> TariffSchedule:
     return TariffSchedule(
-        name="tiered", utility="u", country="US", currency="USD",
-        structure="tiered", fixed_monthly_charge=0.0,
+        name="tiered",
+        utility="u",
+        country="US",
+        currency="USD",
+        structure="tiered",
+        fixed_monthly_charge=0.0,
         tiered_blocks=[
             TieredBlock(rate_per_kwh=0.20, up_to_kwh_per_month=300.0),
             TieredBlock(rate_per_kwh=0.40, up_to_kwh_per_month=None),
@@ -109,11 +137,20 @@ def test_nem_1to1_tou_with_unmatched_hour_raises() -> None:
     for h in range(16, 21):
         peak[h] = True
     incomplete = TariffSchedule(
-        name="weekday only", utility="u", country="US", currency="USD",
-        structure="tou", fixed_monthly_charge=0.0,
+        name="weekday only",
+        utility="u",
+        country="US",
+        currency="USD",
+        structure="tou",
+        fixed_monthly_charge=0.0,
         tou_periods=[
-            TouPeriod(name="peak", rate_per_kwh=0.45,
-                      months=list(range(1, 13)), hour_mask=peak, is_weekday=True),
+            TouPeriod(
+                name="peak",
+                rate_per_kwh=0.45,
+                months=list(range(1, 13)),
+                hour_mask=peak,
+                is_weekday=True,
+            ),
         ],
     )
     export = _zero_export()
