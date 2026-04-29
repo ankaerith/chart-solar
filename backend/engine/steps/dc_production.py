@@ -7,11 +7,12 @@ deferred until extraction surfaces a module model number; this step
 hits the 5-8 % accuracy band that satisfies the audit's headline
 forecast.
 
-Cell-temperature derating is applied here implicitly via PVWatts's
-default cell-temp model (SAPM `open_rack_glass_glass`). The
-`engine.cell_temperature` and `engine.clipping` steps layer per-hour
-overrides on top when extraction surfaces enough detail to override
-the defaults; this step only does the base ModelChain run.
+Cell-temperature derating (SAPM `open_rack_glass_glass`) and inverter
+clipping (saturation at ``inverter_ac_kw``) are both applied by pvlib
+inside ``ModelChain.with_pvwatts`` — see ADR 0006 for why we don't
+have separate engine steps for either. ``gamma_pdc`` and
+``temperature_model`` are extension points for the extraction
+pipeline (real spec sheets), not user-facing toggles.
 """
 
 from __future__ import annotations
@@ -103,8 +104,8 @@ def run_dc_production(
     Inputs are deliberately minimal: tilt / azimuth / DC kW from
     extraction (or a sane default), TMY hourly weather from the
     irradiance providers. The inverter is sized off
-    ``DEFAULT_DC_AC_RATIO`` when not supplied; the audit's clipping
-    flag is computed downstream in ``engine.clipping``.
+    ``DEFAULT_DC_AC_RATIO`` when not supplied; the audit's "aggressive
+    DC:AC ratio" flag reads ``DcProductionResult.dc_ac_ratio``.
     """
     if inverter_ac_kw is None:
         inverter_ac_kw = system.dc_kw / DEFAULT_DC_AC_RATIO

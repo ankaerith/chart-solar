@@ -27,6 +27,7 @@ Don't edit accepted ADRs in place — supersede with a new one and link both dir
 | [0003](./0003-llm-vendor-vertex-ai-gemini.md) | LLM vendor: Vertex AI Gemini, single-vendor at start | accepted |
 | [0004](./0004-eo-insurance-deferred.md) | E&O insurance deferred at Phase 1 launch | accepted |
 | [0005](./0005-aggregation-default-on-no-ui.md) | Aggregation default ON, no Phase 1 UI, opt-out plumbing in place | accepted |
+| [0006](./0006-engine-steps-wrap-pvlib.md) | Engine steps wrap pvlib; don't reimplement physics | accepted |
 
 ## Conventions
 
