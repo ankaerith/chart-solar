@@ -81,27 +81,27 @@ Operating cost projections live in `BUSINESS_PLAN.md` (Operating Costs section).
 
 ## Architecture: Extensible Modeling Engine
 
-Many small modeling refinements are coming (clipping, soiling, snow loss, shading factors, inverter efficiency curves, temperature derating, bifacial gain, etc.). Engine is a pipeline of composable, individually testable transforms — **pure-Python from day 1, pvlib-backed**.
+Many small modeling refinements are coming (soiling, snow loss, shading factors, bifacial gain, etc.). Engine is a pipeline of composable, individually testable transforms — **pure-Python from day 1, pvlib-backed**. Per ADR 0006, engine steps wrap pvlib for any modeling pvlib supports rather than reimplementing physics — cell-temperature derating and inverter clipping live inside `dc_production`'s ModelChain, not as separate steps.
 
 ```
 backend/
   engine/
     inputs.py             # Pydantic schemas for SystemInputs, FinancialInputs, TariffInputs
-    pipeline.py           # run_forecast(inputs) -> ForecastResult
+    pipeline.py           # run_forecast(inputs, *, tmy) -> ForecastResult
     steps/
       irradiance.py       # NSRDB / PVGIS / Open-Meteo source adapters (IrradianceProvider)
-      dc_production.py    # pvlib ModelChain: nameplate × irradiance × derate
-      clipping.py         # DC:AC ratio clipping (registered modifier)
-      soiling.py          # monthly soiling loss curve
-      snow.py             # snow loss model (lat-dependent)
-      temperature.py      # cell-temp derating
-      degradation.py      # year-over-year degradation curve
+      dc_production.py    # pvlib ModelChain.with_pvwatts: irradiance + cell-temp + inverter clipping
+      soiling.py          # wraps pvlib.soiling once monthly precipitation routes through TmyData
+      snow.py             # wraps pvlib.snow once monthly snowfall + RH route through TmyData
+      degradation.py      # year-over-year degradation curve (no pvlib equivalent)
       consumption.py      # baseline + EV + heat pump load profiles (ResStock archetypes)
       battery_dispatch.py # 8760-hour TOU dispatch (rule-based at launch; LP-optimized later)
-      tariff.py           # TOU + tiered + export-credit (incl. NEM 3.0 / NBT) billing
-      finance.py          # loans (port amortization.py), state+local credits, NPV/IRR/payback
+      tariff.py           # flat + tiered + simple-TOU billing
+      export_credit.py    # NEM 1:1 + NEM 3.0 NBT + UK SEG (flat / TOU)
+      finance.py          # loans, state+local credits, NPV/IRR/payback (orchestrator pending)
       monte_carlo.py      # stochastic wrapper: rate-escalation path × weather year × degradation × hold duration
-    registry.py           # feature-flag-aware step registration
+    finance/              # pure-math primitives: amortization, cashflow (NPV/IRR/MIRR/LCOE)
+    registry.py           # feature-flag-aware step registration (engine.<step> keys)
   entitlements/
     features.py           # registry of feature keys → tier
     guards.py             # FastAPI dependency for tier gating
@@ -111,9 +111,9 @@ frontend/
 ```
 
 Each step:
-- Pure function `(state) => state` (no side effects)
+- Pure-math entry point — no IO inside the engine; weather is fetched by the worker and passed in
 - Has its own unit tests + golden fixtures (cross-validated against the current single-user repo's outputs)
-- Registers a feature key (`engine.battery.hourly_dispatch`) so it can be promoted/demoted between tiers from a config file
+- Registers a flat `engine.<step>` feature key (e.g. `engine.tariff`, `engine.export_credit`) so it can be promoted/demoted between tiers from a config file
 - Exposes its assumptions for the "show your work" methodology view
 
 **Snapshots are versioned.** Every saved forecast or audit records the engine version + pvlib version + irradiance-source snapshot. Re-opening a saved audit never silently re-computes with a newer engine; users trust the number because it's reproducible.
@@ -468,7 +468,7 @@ pvlib and hourly 8760 simulation are present from Phase 1 (no separate "engine u
 | Phase | Scope | Rough effort |
 |---|---|---|
 | 0. Plan + repo setup | Plan approval, new repo, Next.js container scaffold, FastAPI backend scaffold, Postgres, Dockerfiles, Fly.io deploy, CI | 1-2 wks |
-| **1a. Engine + BS-detector plumbing (critical path)** | **pvlib pipeline: irradiance providers (NSRDB/PVGIS/Open-Meteo), DC production, clipping, soiling, temperature, degradation, tariff (flat + TOU + NEM 3.0), finance (loan + NPV + IRR + payback), Monte Carlo wrapper. Port `calculations.py` + `amortization.py` golden-fixture tests from current repo. Async job queue + worker.** | **5-7 wks** |
+| **1a. Engine + BS-detector plumbing (critical path)** | **pvlib pipeline: irradiance providers (NSRDB/PVGIS/Open-Meteo), DC production (incl. cell-temp + inverter clipping via ModelChain per ADR 0006), soiling + snow (pvlib-backed once monthly weather inputs land), degradation, tariff (flat + tiered + simple-TOU), export credit (NEM 1:1 + NEM 3.0 NBT + UK SEG), finance (loan + NPV + IRR + payback), Monte Carlo wrapper. Port `calculations.py` + `amortization.py` golden-fixture tests from current repo. Async job queue + worker.** | **5-7 wks** |
 | **1b. Proposal Audit MVP (HERO)** | **PDF upload (24-72h TTL purge), Vertex AI Gemini extraction pipeline (fields per inventory; ZDR; inline_data), human-in-the-loop correction UI, variance report, heuristic BOM alternative rules, multi-bid comparison view, `audits` + `installer_quotes` + `installers` + `user_pii_vault` + regional aggregates, installer detail retention (internal only, rep direct PII stripped), default-ON aggregation + opt-out plumbing (no Phase 1 UI; per [ADR 0005](docs/adr/0005-aggregation-default-on-no-ui.md)). Test suite seeded with user's Puget Sound proposal set.** | **5-7 wks** |
 | 2. Auth + Stripe | Auth.js or FastAPI-native JWT + magic link, Stripe checkout (Decision Pack + Founders bundle), entitlements layer, save/revisit audits | 2-3 wks |
 | 3a. Decision Pack depth | Scenario diff, battery hourly dispatch (rule-based), TOU tariff refinement, user-configurable discount rate + opportunity-cost overlays, sale-scenario modeling, methodology PDF export, share links, **DSIRE incentives integration (post counsel review)** | 5-7 wks |
