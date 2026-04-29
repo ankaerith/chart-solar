@@ -64,10 +64,8 @@ def irr(cashflows: list[float], *, guess_low: float = -0.99, guess_high: float =
         npv_mid = npv(mid, cashflows)
         if abs(npv_mid) < 1e-9:
             return mid
-        # Sign convention: NPV is monotone-decreasing in rate when the
-        # cashflow stream starts negative (the typical solar case).
-        # Track the sign at low / high to stay correct for sign-flipped
-        # streams too.
+        # Track sign at the moving endpoint so the bracket invariant
+        # holds for both standard and sign-flipped cashflow streams.
         if npv_mid * npv_low > 0:
             low = mid
             npv_low = npv_mid
@@ -97,13 +95,14 @@ def mirr(
     if finance_rate <= -1.0 or reinvest_rate <= -1.0:
         raise ValueError("rates must be > -1.0")
 
-    n = len(cashflows) - 1  # IRR conventions: n = number of periods, not entries
-    pv_outflows = sum(
-        cf / (1.0 + finance_rate) ** t for t, cf in enumerate(cashflows) if cf < 0
-    )
-    fv_inflows = sum(
-        cf * (1.0 + reinvest_rate) ** (n - t) for t, cf in enumerate(cashflows) if cf > 0
-    )
+    n = len(cashflows) - 1
+    pv_outflows = 0.0
+    fv_inflows = 0.0
+    for t, cf in enumerate(cashflows):
+        if cf < 0:
+            pv_outflows += cf / (1.0 + finance_rate) ** t
+        elif cf > 0:
+            fv_inflows += cf * (1.0 + reinvest_rate) ** (n - t)
     if pv_outflows == 0 or fv_inflows == 0:
         raise ValueError("MIRR requires both positive and negative cashflows")
     return float((fv_inflows / -pv_outflows) ** (1.0 / n) - 1.0)
@@ -127,22 +126,16 @@ def discounted_payback_years(
         raise ValueError("discount_rate must be > -1.0")
 
     cumulative = 0.0
-    previous_cumulative = 0.0
     for t, cf in enumerate(cashflows):
         previous_cumulative = cumulative
-        cumulative += cf / (1.0 + discount_rate) ** t
-        if cumulative >= 0 and previous_cumulative < 0:
-            year_increment = cf / (1.0 + discount_rate) ** t
-            if year_increment <= 0:
-                # Defensive: cumulative jumped from negative to ≥0
-                # without the current year being a positive contribution
-                # — should be impossible, but don't divide by zero.
-                return float(t)
-            fraction = -previous_cumulative / year_increment
-            return float(t - 1) + fraction
-        if cumulative >= 0 and t == 0:
-            # Year-0 already non-negative — payback is immediate.
+        year_increment = cf / (1.0 + discount_rate) ** t
+        cumulative += year_increment
+        if cumulative < 0:
+            continue
+        if t == 0:
             return 0.0
+        fraction = -previous_cumulative / year_increment
+        return float(t - 1) + fraction
     return None
 
 
