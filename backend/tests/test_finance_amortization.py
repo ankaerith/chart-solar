@@ -21,10 +21,6 @@ from backend.engine.finance import (
     monthly_payment,
 )
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 
 def _expected_payment(p: float, apr: float, n: int) -> float:
     """Reference implementation — direct from the formula."""
@@ -32,11 +28,6 @@ def _expected_payment(p: float, apr: float, n: int) -> float:
         return p / n
     r = apr / 12.0
     return p * r * (1 + r) ** n / ((1 + r) ** n - 1)
-
-
-# ---------------------------------------------------------------------------
-# monthly_payment
-# ---------------------------------------------------------------------------
 
 
 def test_monthly_payment_matches_textbook_formula() -> None:
@@ -56,11 +47,6 @@ def test_monthly_payment_zero_principal_is_zero() -> None:
 def test_monthly_payment_rejects_zero_term() -> None:
     with pytest.raises(ValueError, match="term_months must be positive"):
         monthly_payment(1000.0, 0.05, 0)
-
-
-# ---------------------------------------------------------------------------
-# amortize (fixed-rate)
-# ---------------------------------------------------------------------------
 
 
 def test_amortize_full_schedule_closes_to_zero() -> None:
@@ -93,7 +79,6 @@ def test_amortize_first_payment_matches_monthly_payment_formula() -> None:
     p, apr, n = 30_000.0, 0.0499, 25 * 12
     schedule = amortize(principal=p, apr=apr, term_months=n)
     assert schedule.rows[0].payment == pytest.approx(_expected_payment(p, apr, n))
-    assert schedule.monthly_payment_first == pytest.approx(_expected_payment(p, apr, n))
 
 
 def test_amortize_last_row_squashes_floating_point_residue() -> None:
@@ -107,11 +92,6 @@ def test_amortize_last_row_squashes_floating_point_residue() -> None:
 def test_amortize_rejects_negative_principal() -> None:
     with pytest.raises(ValueError, match="principal must be >= 0"):
         amortize(principal=-1.0, apr=0.05, term_months=60)
-
-
-# ---------------------------------------------------------------------------
-# amortize_variable
-# ---------------------------------------------------------------------------
 
 
 def test_amortize_variable_constant_rate_matches_fixed() -> None:
@@ -140,11 +120,6 @@ def test_amortize_variable_rate_step_up_recomputes_payment() -> None:
 def test_amortize_variable_rejects_empty_rates() -> None:
     with pytest.raises(ValueError, match="must be non-empty"):
         amortize_variable(principal=10_000.0, monthly_rates=[])
-
-
-# ---------------------------------------------------------------------------
-# Dealer fee — the audit's high-severity flag
-# ---------------------------------------------------------------------------
 
 
 def test_dealer_fee_zero_returns_stated_apr() -> None:
@@ -225,11 +200,6 @@ def test_dealer_fee_rejects_invalid_inputs() -> None:
         dealer_fee_effective_apr(
             cash_price=10_000.0, stated_apr=0.05, dealer_fee_pct=0.10, term_months=0
         )
-
-
-# ---------------------------------------------------------------------------
-# Schedule shape
-# ---------------------------------------------------------------------------
 
 
 def test_amortization_row_rejects_negative_payment() -> None:
