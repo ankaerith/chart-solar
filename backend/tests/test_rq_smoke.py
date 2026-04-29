@@ -11,6 +11,7 @@ import redis as redis_lib
 from rq import Queue, SimpleWorker
 from rq.job import Job, JobStatus
 
+import backend.workers.forecast_worker as forecast_worker
 from backend.engine.inputs import (
     FinancialInputs,
     ForecastInputs,
@@ -18,6 +19,8 @@ from backend.engine.inputs import (
     TariffInputs,
 )
 from backend.infra.logging import set_correlation_id
+from backend.providers.fake import synthetic_tmy
+from backend.providers.irradiance import TmyData
 from backend.workers.queue import enqueue_forecast, get_queue, get_redis
 
 
@@ -37,7 +40,23 @@ def queue() -> Iterator[Queue]:
     q.empty()  # type: ignore[no-untyped-call]
 
 
-def test_forecast_job_round_trips_through_real_queue(queue: Queue) -> None:
+@pytest.fixture
+def _stub_tmy_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Swap the worker's TMY fetcher for a synthetic clear-sky year.
+
+    ``SimpleWorker`` runs jobs in-process, so monkeypatching the module
+    attribute on the test process also patches the worker's view. The
+    real fetcher hits NSRDB / PVGIS and needs API keys + network — both
+    absent in CI.
+    """
+
+    def _fake(inputs: ForecastInputs) -> TmyData:
+        return synthetic_tmy(lat=inputs.system.lat, lon=inputs.system.lon)
+
+    monkeypatch.setattr(forecast_worker, "_fetch_tmy", _fake)
+
+
+def test_forecast_job_round_trips_through_real_queue(queue: Queue, _stub_tmy_fetch: None) -> None:
     inputs = ForecastInputs(
         system=SystemInputs(lat=47.6, lon=-122.3, dc_kw=8.0, tilt_deg=25, azimuth_deg=180),
         financial=FinancialInputs(),
@@ -52,7 +71,13 @@ def test_forecast_job_round_trips_through_real_queue(queue: Queue) -> None:
 
     job = Job.fetch(job_id, connection=get_redis())
     assert job.get_status() == JobStatus.FINISHED
-    assert job.result == {"artifacts": {}}
+    artifacts = job.result["artifacts"]
+    # Without a tariff schedule or export-credit config the chain runs
+    # the always-on physics steps and stops before billing.
+    assert "engine.dc_production" in artifacts
+    assert "engine.degradation" in artifacts
+    assert "engine.tariff" not in artifacts
+    assert "engine.export_credit" not in artifacts
 
 
 def test_correlation_id_propagates_to_job_meta(queue: Queue) -> None:
