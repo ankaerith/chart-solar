@@ -31,10 +31,6 @@ from backend.providers.irradiance.openmeteo import (
 )
 from backend.providers.irradiance.pvgis import PvgisProvider, parse_pvgis_json
 
-# ---------------------------------------------------------------------------
-# Auto-router
-# ---------------------------------------------------------------------------
-
 
 def test_router_us_picks_nsrdb() -> None:
     boulder = pick_provider(40.0150, -105.2705, settings=_settings(nsrdb=True))
@@ -66,11 +62,6 @@ def test_router_eu_european_locations_pick_pvgis() -> None:
     rome = pick_provider(41.9028, 12.4964, settings=_settings())
     assert paris.name == "pvgis"
     assert rome.name == "pvgis"
-
-
-# ---------------------------------------------------------------------------
-# NSRDB parser
-# ---------------------------------------------------------------------------
 
 
 def test_parse_nsrdb_csv_returns_8760_hour_tmy() -> None:
@@ -111,11 +102,6 @@ def test_nsrdb_provider_raises_without_credentials() -> None:
         asyncio.run(run())
 
 
-# ---------------------------------------------------------------------------
-# PVGIS parser
-# ---------------------------------------------------------------------------
-
-
 def test_parse_pvgis_json_returns_8760_hour_tmy() -> None:
     payload = _synthetic_pvgis_payload(hours=HOURS_PER_TMY, elevation=15.0)
     tmy = parse_pvgis_json(payload, source_lat=51.5074, source_lon=-0.1278)
@@ -130,11 +116,6 @@ def test_parse_pvgis_json_rejects_short_payload() -> None:
     payload = _synthetic_pvgis_payload(hours=24, elevation=0.0)
     with pytest.raises(ValueError, match="must be 8760"):
         parse_pvgis_json(payload, source_lat=0.0, source_lon=0.0)
-
-
-# ---------------------------------------------------------------------------
-# Open-Meteo parser + paid-flag plumbing
-# ---------------------------------------------------------------------------
 
 
 def test_parse_openmeteo_json_8760() -> None:
@@ -164,11 +145,6 @@ async def test_openmeteo_paid_without_key_raises() -> None:
     p = OpenMeteoProvider(paid_enabled=True, api_key=None)
     with pytest.raises(RuntimeError, match="openmeteo_paid_api_key"):
         await p.fetch_tmy(0.0, 0.0)
-
-
-# ---------------------------------------------------------------------------
-# End-to-end via httpx.MockTransport — provider.fetch_tmy() round-trip
-# ---------------------------------------------------------------------------
 
 
 async def test_pvgis_fetch_round_trips_through_mock_transport(
@@ -206,11 +182,6 @@ async def test_openmeteo_fetch_round_trips_through_mock_transport(
     assert tmy.source == "openmeteo"
     assert len(tmy.ghi_w_m2) == HOURS_PER_TMY
     assert OPENMETEO_FREE_URL.split("//", 1)[1].split("/", 1)[0] in captured["url"]
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _settings(nsrdb: bool = False, openmeteo_paid: bool = False) -> Settings:

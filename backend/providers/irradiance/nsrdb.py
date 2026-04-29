@@ -29,9 +29,8 @@ class NsrdbProvider:
     name: IrradianceSource = "nsrdb"
 
     def __init__(self, *, api_key: str | None, user_email: str | None) -> None:
-        # The provider stays constructable without credentials so DI
-        # wiring at app startup doesn't blow up; `fetch_tmy` raises a
-        # clear error if it actually tries to call.
+        # Stays constructable without credentials so DI wiring at app
+        # startup doesn't blow up; `fetch_tmy` raises if actually called.
         self._api_key = api_key
         self._user_email = user_email
         self._get = make_get(service="nsrdb")
@@ -107,9 +106,7 @@ def parse_nsrdb_csv(body: str, *, source_lat: float, source_lon: float) -> TmyDa
 
 
 def _offset_to_iana_etc(offset_hours: float) -> str:
-    """NSRDB reports `Local Time Zone` as a numeric UTC offset.
-
-    pvlib accepts IANA names; `Etc/GMT±N` is the portable shim and
-    matches PVGIS' output. Note the sign flip (POSIX convention)."""
+    """`Etc/GMT±N` is pvlib-friendly and uses POSIX sign convention
+    (positive offset → negative `Etc/GMT-N`)."""
     sign = "-" if offset_hours > 0 else "+"
     return f"Etc/GMT{sign}{abs(int(offset_hours))}"

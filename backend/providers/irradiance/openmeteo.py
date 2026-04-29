@@ -5,10 +5,8 @@ Paid tier:  https://customer-archive-api.open-meteo.com/v1/archive
             requires an API key, switched on by `OPENMETEO_PAID_ENABLED`
             (€29/mo Standard plan per PRODUCT_PLAN.md § Weather).
 
-We don't get a true TMY from Open-Meteo — we synthesise one by pulling
-a single representative recent year (the most recently completed
-calendar year) at hourly resolution. That's adequate for v1 and matches
-what the existing single-user repo does.
+Open-Meteo doesn't ship a true TMY — we synthesise one by pulling the
+most recently completed calendar year hourly.
 """
 
 from __future__ import annotations
@@ -77,28 +75,22 @@ def parse_openmeteo_json(
     source_lat: float,
     source_lon: float,
 ) -> TmyData:
-    """Parse Open-Meteo Archive JSON. Pure."""
     elevation = float(payload.get("elevation", 0.0))
     timezone = payload.get("timezone", "UTC") or "UTC"
 
     hourly = payload.get("hourly", {})
-    ghi = [float(v or 0.0) for v in hourly.get("shortwave_radiation", [])]
-    dni = [float(v or 0.0) for v in hourly.get("direct_normal_irradiance", [])]
-    dhi = [float(v or 0.0) for v in hourly.get("diffuse_radiation", [])]
-    temp = [float(v or 0.0) for v in hourly.get("temperature_2m", [])]
-    wind = [float(v or 0.0) for v in hourly.get("wind_speed_10m", [])]
+    channels = {
+        "ghi": _channel(hourly, "shortwave_radiation"),
+        "dni": _channel(hourly, "direct_normal_irradiance"),
+        "dhi": _channel(hourly, "diffuse_radiation"),
+        "temp": _channel(hourly, "temperature_2m"),
+        "wind": _channel(hourly, "wind_speed_10m"),
+    }
+    if len(channels["ghi"]) == 8784:
+        # Leap year — trim Feb 29 so v1 always sees a consistent 8760 TMY.
+        channels = {k: _drop_feb29(v) for k, v in channels.items()}
 
-    # Open-Meteo returns 8784 hours in a leap year and 8760 otherwise.
-    # We trim Feb-29 in leap years to produce a consistent 8760 TMY.
-    if len(ghi) == 8784:
-        ghi, dni, dhi, temp, wind = (
-            _drop_feb29(ghi),
-            _drop_feb29(dni),
-            _drop_feb29(dhi),
-            _drop_feb29(temp),
-            _drop_feb29(wind),
-        )
-
+    ghi = channels["ghi"]
     if len(ghi) != HOURS_PER_TMY:
         raise ValueError(f"Open-Meteo payload had {len(ghi)} hourly rows; expected {HOURS_PER_TMY}")
 
@@ -109,23 +101,24 @@ def parse_openmeteo_json(
         timezone=timezone,
         source="openmeteo",
         fetched_at=datetime.now(UTC),
-        ghi_w_m2=ghi,
-        dni_w_m2=dni,
-        dhi_w_m2=dhi,
-        temp_air_c=temp,
-        wind_speed_m_s=wind,
+        ghi_w_m2=channels["ghi"],
+        dni_w_m2=channels["dni"],
+        dhi_w_m2=channels["dhi"],
+        temp_air_c=channels["temp"],
+        wind_speed_m_s=channels["wind"],
     )
 
 
+def _channel(hourly: dict[str, Any], key: str) -> list[float]:
+    return [float(v or 0.0) for v in hourly.get(key, [])]
+
+
 def _representative_year() -> int:
-    """Most recently completed calendar year — Open-Meteo's archive
-    extends through ~5 days of lag, so the last fully-closed year is
-    a safe choice."""
-    today = date.today()
-    return today.year - 1
+    # Open-Meteo's archive lags by a few days, so the most recently
+    # completed calendar year is the safe choice.
+    return date.today().year - 1
 
 
 def _drop_feb29(series: list[float]) -> list[float]:
-    """Drop the 24 hours starting Feb 29 00:00 (hour index 1416..1439)."""
-    feb29_start = (31 + 28) * 24  # day-of-year for Feb 29 00:00 in a leap year
+    feb29_start = (31 + 28) * 24
     return series[:feb29_start] + series[feb29_start + 24 :]
