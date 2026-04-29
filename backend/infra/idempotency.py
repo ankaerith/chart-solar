@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar, cast
 
 from fastapi import HTTPException, Request, Response, status
-from sqlalchemy import insert, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -199,11 +199,8 @@ def idempotent(
 
 def _serialise_response(result: Any) -> dict[str, Any]:
     """Coerce a handler return value into a JSON-able dict for caching.
-
-    FastAPI handlers commonly return dict, Pydantic model, or list. We
-    only cache dicts; non-dict shapes round-trip through json.dumps so
-    a list-returning handler still caches but with a synthetic envelope.
-    """
+    Non-dict, non-Pydantic shapes (e.g. lists) get wrapped in an
+    `_envelope` key so the cache table only ever stores objects."""
     if hasattr(result, "model_dump"):
         return cast(dict[str, Any], result.model_dump(mode="json"))
     if isinstance(result, dict):
@@ -252,8 +249,3 @@ __all__ = [
     "idempotent",
     "record_stripe_event",
 ]
-
-
-# `insert` is re-exported for tests that exercise raw inserts; keep the
-# import alive for type-checkers in strict mode.
-_ = insert
