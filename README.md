@@ -17,6 +17,12 @@ Read in this order:
 3. [`BUSINESS_PLAN.md`](BUSINESS_PLAN.md) — competitive analysis, market sizing, pricing, success metrics, operating costs, business-side risks.
 4. [`LEGAL_CONSIDERATIONS.md`](LEGAL_CONSIDERATIONS.md) — data-source IP, commercial-use risk, LLM AUP analysis, retention policy.
 
+## Engineering docs
+
+- [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — Definition of Done, repo layout, testing strategy, operational expectations.
+- [`docs/adr/`](docs/adr/) — Architecture Decision Records (Phase 1 closed decisions and beyond).
+- [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) — PR checklist mirroring DoD.
+
 ## Next
 
 Phase 0 scaffold (Next.js 15 web, FastAPI backend, Postgres, Redis, Dockerfiles, CI, Fly.io deploy) lands in a follow-up PR. See `PRODUCT_PLAN.md` § Phased Roadmap.
