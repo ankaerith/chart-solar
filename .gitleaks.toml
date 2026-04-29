@@ -1,0 +1,15 @@
+# Gitleaks configuration — extends the default ruleset.
+# Tests use static "key-like" strings as fixture data; allowlist them so
+# generic-api-key entropy heuristics don't fail CI on benign test data.
+
+# Inherit gitleaks' default rules (don't replace them — only add allowlists).
+title = "chart-solar gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures use static keys to assert idempotency / replay behavior"
+paths = [
+    '''backend/tests/.*\.py''',
+]
