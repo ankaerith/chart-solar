@@ -25,28 +25,28 @@ class Settings(BaseSettings):
     # Frontend → API
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # S3-compatible object storage (R2 / S3 / GCS / MinIO) — chart-solar-g93
+    # S3-compatible object storage (R2 / S3 / GCS / MinIO)
     s3_bucket: str | None = None
     s3_region: str = "auto"
     s3_endpoint_url: str | None = None
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
 
-    # Vertex AI (PDF extraction — Phase 1b) — chart-solar-5e1
+    # Vertex AI (PDF extraction)
     vertex_project_id: str | None = None
     vertex_location: str = "us-central1"
     vertex_credentials_json: str | None = None
 
-    # Stripe (Decision Pack / Founders / Track) — chart-solar-79i
+    # Stripe
     stripe_secret_key: str | None = None
     stripe_publishable_key: str | None = None
     stripe_webhook_secret: str | None = None
 
-    # Resend (transactional email — magic links, audit delivery)
+    # Resend (transactional email)
     resend_api_key: str | None = None
     resend_from_email: str = "noreply@chartsolar.io"
 
-    # Sentry (error tracking)
+    # Sentry
     sentry_dsn: str | None = None
 
     # Auth (FastAPI-native magic-link JWT path)

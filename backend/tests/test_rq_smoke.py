@@ -1,7 +1,6 @@
 """Redis + RQ end-to-end round-trip.
 
 Skips locally when Redis isn't running; CI exercises it via a `redis` service container.
-Bead: chart-solar-eni.
 """
 
 from collections.abc import Iterator
