@@ -136,6 +136,7 @@ def _finance_year_terms(
         hourly_avoided_cost_per_kwh=export_config.hourly_avoided_cost_per_kwh,
         rate_per_kwh=export_config.flat_rate_per_kwh,
         hourly_rate_per_kwh=export_config.hourly_rate_per_kwh,
+        hourly_net_load_kwh=net_load,
     )
 
     if export_config.regime == "nem_three_nbt":

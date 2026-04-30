@@ -154,7 +154,8 @@ def _adapter_export_credit(state: ForecastState, fn: StepFn) -> None:
     config = state.inputs.tariff.export_credit
     if config is None:
         return
-    hourly_export = [max(0.0, -nl) for nl in _net_load(state)]
+    net_load = _net_load(state)
+    hourly_export = [max(0.0, -nl) for nl in net_load]
     state.artifacts["engine.export_credit"] = fn(
         regime=config.regime,
         hourly_export_kwh=hourly_export,
@@ -162,6 +163,7 @@ def _adapter_export_credit(state: ForecastState, fn: StepFn) -> None:
         hourly_avoided_cost_per_kwh=config.hourly_avoided_cost_per_kwh,
         rate_per_kwh=config.flat_rate_per_kwh,
         hourly_rate_per_kwh=config.hourly_rate_per_kwh,
+        hourly_net_load_kwh=net_load,
     )
 
 

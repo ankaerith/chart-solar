@@ -88,6 +88,33 @@ def _zero_export() -> list[float]:
     return [0.0] * HOURS_PER_TMY
 
 
+def _signed_monthly(*, import_per_month: float, export_per_month: float) -> list[float]:
+    """8760-entry signed net load: each month carries ``import_per_month``
+    in its first-half hours and ``-export_per_month`` in its second-half.
+    Within-month ordering doesn't affect NEM 1:1 tier-walking netting
+    (which aggregates per month) — the helper just spreads the totals
+    so a typical 8760 walker visits both sign zones."""
+    from backend.providers.irradiance import tmy_hour_calendar
+
+    calendar = tmy_hour_calendar()
+    hours_by_month: dict[int, list[int]] = {m: [] for m in range(1, 13)}
+    for hour_index, (month, _is_weekday, _hour_of_day) in enumerate(calendar):
+        hours_by_month[month].append(hour_index)
+
+    net_load = [0.0] * HOURS_PER_TMY
+    for hours in hours_by_month.values():
+        half = len(hours) // 2
+        if half == 0:
+            continue
+        per_import_hour = import_per_month / half
+        per_export_hour = export_per_month / (len(hours) - half)
+        for hour_index in hours[:half]:
+            net_load[hour_index] = per_import_hour
+        for hour_index in hours[half:]:
+            net_load[hour_index] = -per_export_hour
+    return net_load
+
+
 # ---- NEM 1:1 ---------------------------------------------------------
 
 
@@ -114,12 +141,76 @@ def test_nem_1to1_tou_uses_band_rate_per_hour() -> None:
     assert off.annual_credit == pytest.approx(0.15)
 
 
-def test_nem_1to1_tiered_credits_at_top_rate() -> None:
-    """Tiered NEM 1:1 credits at the top tier rate as the conservative
-    "marginal value of avoiding an import" upper bound."""
+def test_nem_1to1_tiered_requires_signed_net_load() -> None:
+    """Tier-walking netting needs imports + exports to derive each
+    month's tier-walk delta; passing exports alone can't tell us the
+    monthly tier cursor."""
     export = [1.0] * HOURS_PER_TMY
-    result = apply_nem_one_for_one(hourly_export_kwh=export, tariff=_tiered_tariff())
-    assert result.annual_credit == pytest.approx(8760 * 0.40)
+    with pytest.raises(ValueError, match="hourly_net_load_kwh"):
+        apply_nem_one_for_one(hourly_export_kwh=export, tariff=_tiered_tariff())
+
+
+def test_nem_1to1_tiered_nets_export_against_same_month_imports() -> None:
+    """PG&E E-1-style fixture: in each month, 500 kWh imported and
+    200 kWh exported. The household pays for 300 kWh net at the tier
+    walk (cursor 0 → 300 sits entirely in tier 1, $0.20/kWh). Credit
+    is the bill delta:
+      bill_imports_only(500 kWh) = 300 × 0.20 + 200 × 0.40 = $140
+      bill_netted(300 kWh)       = 300 × 0.20             =  $60
+      monthly credit             =                           $80
+    Annual = 12 × $80 = $960. Surplus exports beyond same-month
+    imports forfeit (none here — exports < imports every month)."""
+    net_load = _signed_monthly(import_per_month=500.0, export_per_month=200.0)
+    export = [max(0.0, -nl) for nl in net_load]
+    result = apply_nem_one_for_one(
+        hourly_export_kwh=export,
+        tariff=_tiered_tariff(),
+        hourly_net_load_kwh=net_load,
+    )
+    assert result.regime == "nem_one_for_one"
+    assert result.annual_credit == pytest.approx(12 * 80.0)
+    for monthly in result.monthly_credit:
+        assert monthly == pytest.approx(80.0)
+
+
+def test_nem_1to1_tiered_pure_net_exporter_month_credits_full_import_bill() -> None:
+    """Net exporter month: 100 kWh imported, 800 kWh exported. Netted
+    monthly billable = 0; credit = full imports-only bill = 100 × $0.20
+    = $20. The remaining 700 kWh export forfeits — this helper doesn't
+    bank surplus across months."""
+    net_load = _signed_monthly(import_per_month=100.0, export_per_month=800.0)
+    export = [max(0.0, -nl) for nl in net_load]
+    result = apply_nem_one_for_one(
+        hourly_export_kwh=export,
+        tariff=_tiered_tariff(),
+        hourly_net_load_kwh=net_load,
+    )
+    assert result.annual_credit == pytest.approx(12 * 20.0)
+    # Only the 100 kWh that offset same-month imports is "credited"
+    # — the 700 kWh of forfeit surplus drops out of annual_kwh_exported.
+    assert result.annual_kwh_exported == pytest.approx(12 * 100.0)
+
+
+def test_nem_1to1_tiered_credit_is_strictly_below_top_rate_upper_bound() -> None:
+    """A net-importer household with modest exports sees less credit
+    than ``export_kwh × top_tier_rate`` — exports offset the lowest
+    tier the cursor is sitting in, not the top."""
+    # 200 kWh imports, 50 kWh exports per month: net importer, exports
+    # offset only the top-tier portion of the imports-only bill (which
+    # in this case is 0 because 200 < tier-1 cap of 300). So actual
+    # credit is much smaller than 50 × $0.40.
+    net_load = _signed_monthly(import_per_month=200.0, export_per_month=50.0)
+    export = [max(0.0, -nl) for nl in net_load]
+    result = apply_nem_one_for_one(
+        hourly_export_kwh=export,
+        tariff=_tiered_tariff(),
+        hourly_net_load_kwh=net_load,
+    )
+    # bill_imports(200) = 200 × 0.20 = 40
+    # bill_netted(150)  = 150 × 0.20 = 30
+    # monthly credit    = 10  (vs naive 50 × 0.40 = 20)
+    assert result.annual_credit == pytest.approx(12 * 10.0)
+    assert result.annual_credit < 12 * 50 * 0.40
 
 
 def test_nem_1to1_negative_export_clamped_to_zero() -> None:
