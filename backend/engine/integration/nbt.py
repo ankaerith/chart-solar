@@ -63,8 +63,7 @@ def compute_nbt_net_bill(
     """
     if export_credit.regime != "nem_three_nbt":
         raise ValueError(
-            f"compute_nbt_net_bill expects regime='nem_three_nbt' "
-            f"(got {export_credit.regime!r})"
+            f"compute_nbt_net_bill expects regime='nem_three_nbt' (got {export_credit.regime!r})"
         )
 
     netted: list[MonthlyBill] = []
