@@ -30,6 +30,7 @@ dev = [
     "pre-commit>=4.4",
     "pip-licenses>=5.0",
     "pytest-cov>=7.1.0",
+    "hypothesis>=6.140",
 ]
 
 [tool.ruff]
