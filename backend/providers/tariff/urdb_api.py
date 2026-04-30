@@ -38,6 +38,7 @@ from backend.providers.tariff import (
     TariffQuery,
     TariffSchedule,
     TieredBlock,
+    TouPeriod,
 )
 from backend.providers.tariff.urdb import UrdbSeedProvider
 
@@ -150,10 +151,22 @@ def parse_urdb_response(
     """Map a URDB JSON response onto :class:`TariffSchedule`.
 
     URDB returns ``items[]``; we take the first match (search is
-    sector-pinned + ZIP/utility-pinned upstream). The energy-rate
-    structure is a nested list — index 0 is the schedule the engine
-    consumes; multi-schedule rates (seasonal swaps) are out of scope
-    for this adapter and the seed snapshot path picks them up instead.
+    sector-pinned + ZIP/utility-pinned upstream). Three rate shapes are
+    handled:
+
+    * **Flat** — one period in ``energyratestructure``, one block in
+      that period.
+    * **Tiered** — one period, multiple blocks (``max`` boundaries).
+    * **TOU** — multiple periods plus ``energyweekdayschedule`` /
+      ``energyweekendschedule`` 12×24 matrices of period indices. Each
+      ``(period, weekday-flag)`` pair becomes one or more
+      :class:`TouPeriod` rows, grouped by months that share an
+      identical hour mask so seasonal swaps survive the round-trip.
+
+    Per-period tiered blocks (TOU-with-tiers) collapse to the first
+    block's rate — the engine's TOU billing is single-rate per band.
+    Multi-schedule rates (separate winter/summer documents) are out of
+    scope; the seed snapshot path picks those up instead.
     """
     items = payload.get("items") or []
     if not items:
@@ -168,6 +181,29 @@ def parse_urdb_response(
     energy_rate_structure = item.get("energyratestructure") or []
     if not energy_rate_structure:
         raise ValueError(f"URDB rate {name!r} has no energyratestructure")
+
+    weekday_schedule = item.get("energyweekdayschedule")
+    weekend_schedule = item.get("energyweekendschedule")
+    if (
+        len(energy_rate_structure) > 1
+        and _is_24x12_matrix(weekday_schedule)
+        and _is_24x12_matrix(weekend_schedule)
+    ):
+        tou_periods = _build_tou_periods(
+            energy_rate_structure=energy_rate_structure,
+            weekday_schedule=weekday_schedule,
+            weekend_schedule=weekend_schedule,
+        )
+        if tou_periods:
+            return TariffSchedule(
+                name=name,
+                utility=utility,
+                country=query.country,
+                currency=currency,
+                structure="tou",
+                fixed_monthly_charge=fixed,
+                tou_periods=tou_periods,
+            )
 
     blocks_raw = energy_rate_structure[0]
     if not isinstance(blocks_raw, list) or not blocks_raw:
@@ -207,6 +243,70 @@ def parse_urdb_response(
         fixed_monthly_charge=fixed,
         tiered_blocks=tiered,
     )
+
+
+def _is_24x12_matrix(matrix: object) -> bool:
+    """URDB schedules are 12 rows × 24 cols of integer period indices."""
+    if not isinstance(matrix, list) or len(matrix) != 12:
+        return False
+    for row in matrix:
+        if not isinstance(row, list) or len(row) != 24:
+            return False
+    return True
+
+
+def _build_tou_periods(
+    *,
+    energy_rate_structure: list[Any],
+    weekday_schedule: list[list[int]],
+    weekend_schedule: list[list[int]],
+) -> list[TouPeriod]:
+    """Walk URDB's period schedule into a list of :class:`TouPeriod`.
+
+    For each ``(period_idx, is_weekday)`` pair, build a 12×24 boolean
+    coverage map and group months by identical hour pattern. Months
+    that share an hour mask collapse into a single ``TouPeriod`` —
+    this preserves "summer 4-9 PM" / "winter 4-9 PM" as two rows when
+    the patterns differ, and one row when they match.
+
+    Periods that are referenced nowhere in the schedule (rate-card
+    artefacts) drop silently; they would produce an empty hour mask
+    that would fail TouPeriod's invariants.
+    """
+    periods: list[TouPeriod] = []
+    for period_idx, blocks_raw in enumerate(energy_rate_structure):
+        if not isinstance(blocks_raw, list) or not blocks_raw:
+            continue
+        first_block = blocks_raw[0]
+        if not isinstance(first_block, dict):
+            continue
+        rate = float(first_block.get("rate") or 0.0)
+
+        for is_weekday, schedule in (
+            (True, weekday_schedule),
+            (False, weekend_schedule),
+        ):
+            month_groups: dict[tuple[bool, ...], list[int]] = {}
+            for month_idx, hours_row in enumerate(schedule):
+                mask = tuple(int(hour_period) == period_idx for hour_period in hours_row)
+                if not any(mask):
+                    continue
+                month_groups.setdefault(mask, []).append(month_idx + 1)
+
+            label = f"period_{period_idx}_{'weekday' if is_weekday else 'weekend'}"
+            for mask_tuple, months in month_groups.items():
+                periods.append(
+                    TouPeriod(
+                        name=label
+                        if len(month_groups) == 1
+                        else f"{label}_m{months[0]:02d}-{months[-1]:02d}",
+                        rate_per_kwh=rate,
+                        months=months,
+                        hour_mask=list(mask_tuple),
+                        is_weekday=is_weekday,
+                    )
+                )
+    return periods
 
 
 __all__ = [
