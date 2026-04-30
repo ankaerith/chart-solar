@@ -1,9 +1,9 @@
 """Live URDB API adapter — recorded-fixture tests.
 
-The seed adapter (chart-solar-i3r) ships an offline-by-default provider
-the engine uses without internet. This adapter (chart-solar-67p2) hits
-``api.openei.org/utility_rates`` for fresher coverage and ZIP-level
-dispatch, and falls back to the seed when the API is unreachable.
+The seed adapter ships an offline-by-default provider the engine uses
+without internet. The live adapter hits ``api.openei.org/utility_rates``
+for fresher coverage and ZIP-level dispatch, and falls back to the
+seed when the API is unreachable.
 
 CI runs zero live calls — every test pins the URDB JSON via an
 ``httpx.MockTransport`` or feeds the parser directly.
@@ -255,3 +255,32 @@ async def test_provider_keys_cache_per_utility_zip_country(
     await provider.fetch(TariffQuery(country="US", utility="A", zip_code="10001"))
     await provider.fetch(TariffQuery(country="US", utility="B", zip_code="94102"))
     assert call_count["n"] == 3
+
+
+async def test_provider_evicts_lru_when_cache_exceeds_max(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LRU eviction caps cache memory in long-running workers. After
+    filling beyond cache_max_entries, the oldest entry is dropped and
+    re-querying it triggers a refetch."""
+    call_count = {"n": 0}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        return httpx.Response(200, json=_flat_rate_payload())
+
+    _patch_async_client(monkeypatch, httpx.MockTransport(handler))
+
+    provider = UrdbApiProvider(api_key="k", cache_max_entries=2)
+    a = TariffQuery(country="US", utility="A", zip_code="94102")
+    b = TariffQuery(country="US", utility="B", zip_code="94102")
+    c = TariffQuery(country="US", utility="C", zip_code="94102")
+
+    await provider.fetch(a)  # cache = [a]
+    await provider.fetch(b)  # cache = [a, b]
+    await provider.fetch(c)  # cache = [b, c] — a evicted (oldest)
+    await provider.fetch(b)  # cache hit, no network
+    await provider.fetch(a)  # refetch — a was evicted
+
+    assert call_count["n"] == 4  # a, b, c, a-refetch
+    assert len(provider._cache) == 2

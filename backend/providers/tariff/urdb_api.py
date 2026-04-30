@@ -23,6 +23,7 @@ Behaviour:
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -44,6 +45,7 @@ URDB_API_URL = "https://api.openei.org/utility_rates"
 URDB_API_VERSION = "latest"
 
 DEFAULT_CACHE_TTL = timedelta(days=1)
+DEFAULT_CACHE_MAX_ENTRIES = 1024
 
 
 @dataclass(frozen=True)
@@ -72,13 +74,17 @@ class UrdbApiProvider:
         api_key: str | None = None,
         fallback: UrdbSeedProvider | None = None,
         cache_ttl: timedelta = DEFAULT_CACHE_TTL,
+        cache_max_entries: int = DEFAULT_CACHE_MAX_ENTRIES,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._api_key = api_key
         self._fallback = fallback if fallback is not None else UrdbSeedProvider()
         self._cache_ttl = cache_ttl
+        self._cache_max_entries = cache_max_entries
         self._clock = clock
-        self._cache: dict[tuple[str, str | None, str | None], _CachedRate] = {}
+        # OrderedDict + LRU eviction: long-running workers can't grow
+        # the cache unboundedly when each audit hits a new utility/zip.
+        self._cache: OrderedDict[tuple[str, str | None, str | None], _CachedRate] = OrderedDict()
         self._get = make_get(service="urdb")
 
     async def fetch(self, query: TariffQuery) -> TariffSchedule:
@@ -95,6 +101,7 @@ class UrdbApiProvider:
         cached = self._cache.get(cache_key)
         now = self._clock()
         if cached is not None and (now - cached.fetched_at) < self._cache_ttl:
+            self._cache.move_to_end(cache_key)
             return cached.schedule
 
         try:
@@ -109,6 +116,9 @@ class UrdbApiProvider:
             return await self._fallback.fetch(query)
 
         self._cache[cache_key] = _CachedRate(fetched_at=now, schedule=schedule)
+        self._cache.move_to_end(cache_key)
+        while len(self._cache) > self._cache_max_entries:
+            self._cache.popitem(last=False)
         return schedule
 
     async def _fetch_live(self, query: TariffQuery) -> TariffSchedule:
@@ -152,7 +162,7 @@ def parse_urdb_response(
 
     name = item.get("name") or item.get("label") or "URDB rate"
     utility = item.get("utility") or query.utility or "unknown"
-    currency: CurrencyCode = "USD"  # URDB is US-only
+    currency: CurrencyCode = "USD"
     fixed = float(item.get("fixedchargefirstmeter") or 0.0)
 
     energy_rate_structure = item.get("energyratestructure") or []
