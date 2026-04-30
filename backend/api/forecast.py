@@ -83,9 +83,44 @@ async def submit_forecast(
     return response_body
 
 
+#: Map RQ's internal status names onto the four-state vocabulary the
+#: API contract exposes. RQ's ``deferred`` / ``scheduled`` (waiting on a
+#: dependency or a timer) collapse onto ``queued`` from the caller's
+#: perspective — both mean "the engine hasn't started yet, check back
+#: later". ``stopped`` / ``canceled`` are operator-driven terminal
+#: states and surface as ``error`` so the UI tells the user the job
+#: won't complete; the operator who killed it has the audit trail.
+_RQ_STATUS_TO_API_STATUS: dict[str, str] = {
+    "queued": "queued",
+    "deferred": "queued",
+    "scheduled": "queued",
+    "started": "running",
+    "finished": "done",
+    "failed": "error",
+    "stopped": "error",
+    "canceled": "error",
+}
+
+
 @router.get("/forecast/{job_id}")
 async def forecast_status(job_id: str) -> dict[str, Any]:
+    """Poll a forecast job by id.
+
+    Returns ``{job_id, status, result?}`` where status is one of
+    ``queued``, ``running``, ``done``, ``error``. ``result`` is present
+    only when the job has finished; ``error`` carries RQ's serialised
+    traceback so the caller can self-diagnose a failed run without
+    grepping worker logs (the same trace also lands in structured
+    logging via the worker's exception handler).
+    """
     job = get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
-    return {"job_id": job_id, "status": job.get_status(), "result": job.result}
+    raw_status = job.get_status()
+    api_status = _RQ_STATUS_TO_API_STATUS.get(raw_status, raw_status)
+    response: dict[str, Any] = {"job_id": job_id, "status": api_status}
+    if api_status == "done":
+        response["result"] = job.result
+    elif api_status == "error":
+        response["error"] = job.exc_info
+    return response
