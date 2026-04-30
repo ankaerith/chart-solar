@@ -58,8 +58,13 @@ class OpenMeteoProvider:
                     "diffuse_radiation",
                     "temperature_2m",
                     "wind_speed_10m",
+                    "relative_humidity_2m",
                 ]
             ),
+            # Daily totals for precipitation + snowfall; aggregating to
+            # monthly happens in the parser. Open-Meteo's daily API is
+            # in the same archive endpoint so this is one HTTP call.
+            "daily": ",".join(["precipitation_sum", "snowfall_sum"]),
             "timezone": "GMT",
         }
         if self._paid_enabled and self._api_key:
@@ -85,6 +90,7 @@ def parse_openmeteo_json(
         "dhi": _channel(hourly, "diffuse_radiation"),
         "temp": _channel(hourly, "temperature_2m"),
         "wind": _channel(hourly, "wind_speed_10m"),
+        "rh": _channel(hourly, "relative_humidity_2m"),
     }
     if len(channels["ghi"]) == 8784:
         # Leap year — trim Feb 29 so v1 always sees a consistent 8760 TMY.
@@ -93,6 +99,15 @@ def parse_openmeteo_json(
     ghi = channels["ghi"]
     if len(ghi) != HOURS_PER_TMY:
         raise ValueError(f"Open-Meteo payload had {len(ghi)} hourly rows; expected {HOURS_PER_TMY}")
+
+    daily = payload.get("daily") or {}
+    daily_dates = daily.get("time") or []
+    monthly_precip_mm = _aggregate_daily_to_monthly_sum(daily_dates, daily.get("precipitation_sum"))
+    monthly_snow_cm_from_m = _aggregate_daily_to_monthly_sum(daily_dates, daily.get("snowfall_sum"))
+    # Open-Meteo reports snowfall in cm/day already, not metres. The
+    # field name is misleading but the units docs confirm cm.
+    monthly_snow_cm = monthly_snow_cm_from_m
+    monthly_rh = _aggregate_hourly_to_monthly_mean(channels["rh"]) if channels["rh"] else None
 
     return TmyData(
         lat=source_lat,
@@ -106,6 +121,9 @@ def parse_openmeteo_json(
         dhi_w_m2=channels["dhi"],
         temp_air_c=channels["temp"],
         wind_speed_m_s=channels["wind"],
+        precipitation_mm_per_month=monthly_precip_mm,
+        snowfall_cm_per_month=monthly_snow_cm,
+        relative_humidity_pct_per_month=monthly_rh,
     )
 
 
@@ -122,3 +140,59 @@ def _representative_year() -> int:
 def _drop_feb29(series: list[float]) -> list[float]:
     feb29_start = (31 + 28) * 24
     return series[:feb29_start] + series[feb29_start + 24 :]
+
+
+def _aggregate_daily_to_monthly_sum(
+    dates: list[str],
+    values: list[float] | None,
+) -> list[float] | None:
+    """Sum a daily series into 12 monthly buckets keyed off ISO date strings.
+
+    Returns ``None`` when the daily payload is missing or empty —
+    callers leave the corresponding TmyData field unset and the engine
+    no-ops.
+    """
+    if not values or not dates:
+        return None
+    if len(dates) != len(values):
+        return None
+    monthly = [0.0] * 12
+    for date_str, value in zip(dates, values, strict=False):
+        if value is None:
+            continue
+        month_idx = int(date_str[5:7]) - 1
+        monthly[month_idx] += float(value)
+    return monthly
+
+
+def _aggregate_hourly_to_monthly_mean(values: list[float]) -> list[float] | None:
+    """Average an 8760-hour series into 12 monthly means.
+
+    Used for relative humidity, where the engine needs a per-month
+    mean rather than a sum. Days-per-month is non-uniform but the
+    sum/count division below handles that correctly.
+    """
+    if len(values) != HOURS_PER_TMY:
+        return None
+    # Hours per month for a non-leap year, in order Jan..Dec.
+    hours_per_month = [
+        31 * 24,
+        28 * 24,
+        31 * 24,
+        30 * 24,
+        31 * 24,
+        30 * 24,
+        31 * 24,
+        31 * 24,
+        30 * 24,
+        31 * 24,
+        30 * 24,
+        31 * 24,
+    ]
+    out: list[float] = []
+    cursor = 0
+    for hours in hours_per_month:
+        chunk = values[cursor : cursor + hours]
+        out.append(sum(chunk) / len(chunk))
+        cursor += hours
+    return out

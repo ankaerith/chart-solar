@@ -89,6 +89,14 @@ class TmyData(BaseModel):
     temp_air_c: list[float] = Field(..., min_length=HOURS_PER_TMY, max_length=HOURS_PER_TMY)
     wind_speed_m_s: list[float] = Field(..., min_length=HOURS_PER_TMY, max_length=HOURS_PER_TMY)
 
+    #: Monthly aggregates feeding ``engine.soiling`` (HSU model) and
+    #: ``engine.snow`` (Townsend). Optional so older cached TMYs and
+    #: adapters that don't carry the data (PVGIS) stay valid; the
+    #: pvlib-backed steps no-op gracefully when the field is None.
+    precipitation_mm_per_month: list[float] | None = Field(None, min_length=12, max_length=12)
+    snowfall_cm_per_month: list[float] | None = Field(None, min_length=12, max_length=12)
+    relative_humidity_pct_per_month: list[float] | None = Field(None, min_length=12, max_length=12)
+
     @model_validator(mode="after")
     def _channels_align(self) -> TmyData:
         lengths = {
