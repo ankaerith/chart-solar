@@ -19,15 +19,18 @@ when the API is unreachable.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable
-from datetime import date, timedelta
+from datetime import date
 from functools import lru_cache
-from importlib import resources
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
+from backend.providers._seed_common import (
+    BundledSeedProvider,
+    is_stale,
+    load_seed_resource,
+)
 from backend.providers.tariff import (
     CurrencyCode,
     TariffQuery,
@@ -120,42 +123,32 @@ def _to_schedule(rate: UrdbRateSeed) -> TariffSchedule:
     )
 
 
+def _urdb_payload_transform(payload: dict[str, Any]) -> dict[str, Any]:
+    """JSON groups rates under ``utilities[].rates[]``; the model carries
+    them flat so a single utility with multiple rates doesn't require
+    nesting at the model layer."""
+    payload["rates"] = _flatten_utilities(payload)
+    payload.pop("utilities", None)
+    return payload
+
+
 @lru_cache(maxsize=1)
 def load_seed() -> UrdbSeed:
     """Read the bundled JSON snapshot into a validated ``UrdbSeed``.
 
-    Loads via ``importlib.resources`` so the file is found whether the
-    package is checked out or installed from a wheel. Raises
-    ``ValueError`` (not the bare Pydantic ``ValidationError``) so callers
-    can catch one type for any seed-load failure.
-
     Cached because the snapshot is a build-time constant — re-reading
     the JSON on every ``UrdbSeedProvider`` instantiation would burn
-    disk I/O for no benefit. The cache is invalidated automatically on
-    ``SEED_RESOURCE_FILENAME`` rotation since the function is keyed on
-    the symbol's identity, not the filename string.
+    disk I/O for no benefit.
     """
-    raw = resources.files(SEED_RESOURCE_PACKAGE).joinpath(SEED_RESOURCE_FILENAME).read_text()
-    payload = json.loads(raw)
-    payload["rates"] = _flatten_utilities(payload)
-    payload.pop("utilities", None)
-    try:
-        return UrdbSeed.model_validate(payload)
-    except ValidationError as exc:
-        raise ValueError(f"URDB seed {SEED_RESOURCE_FILENAME!r} is malformed") from exc
+    return load_seed_resource(
+        package=SEED_RESOURCE_PACKAGE,
+        filename=SEED_RESOURCE_FILENAME,
+        model=UrdbSeed,
+        transform=_urdb_payload_transform,
+    )
 
 
-def is_stale(*, snapshot_date: date, today: date, stale_after_days: int) -> bool:
-    """``True`` once the snapshot is older than the configured window.
-
-    Surfaces in the audit so users know to treat URDB-derived headline
-    numbers as approximate when the rate case behind them has likely
-    been superseded — URDB itself updates on a multi-week cadence.
-    """
-    return (today - snapshot_date) > timedelta(days=stale_after_days)
-
-
-class UrdbSeedProvider:
+class UrdbSeedProvider(BundledSeedProvider[UrdbSeed]):
     """``TariffProvider``-compatible adapter over the bundled seed.
 
     Looks up by ``(country, utility_key)`` — ZIP-level disambiguation
@@ -172,18 +165,6 @@ class UrdbSeedProvider:
         self._index: dict[tuple[str, str], TariffSchedule] = {}
         for rate in self._seed.rates:
             self._index[(rate.country.upper(), rate.utility_key.upper())] = _to_schedule(rate)
-
-    @property
-    def snapshot_date(self) -> date:
-        return self._seed.snapshot_date
-
-    @property
-    def stale(self) -> bool:
-        return is_stale(
-            snapshot_date=self._seed.snapshot_date,
-            today=self._today,
-            stale_after_days=self._seed.stale_warning_days,
-        )
 
     def utilities(self) -> Iterable[str]:
         """Iterate seeded utility keys (uppercased)."""
