@@ -27,6 +27,60 @@ from backend.engine.steps.export_credit import ExportCreditResult
 from backend.engine.steps.tariff import AnnualBill, MonthlyBill
 
 
+def run_monthly_rollover(
+    *,
+    annual_bill: AnnualBill,
+    monthly_credit: list[float],
+) -> tuple[AnnualBill, float, float]:
+    """Apply ``monthly_credit`` against ``annual_bill`` with rollover.
+
+    Returns ``(netted_bill, annual_credit_applied, annual_credit_unused)``.
+    Within-month: credit offsets the energy portion of each month's bill,
+    surplus rolls forward to the next month, negative-credit hours settle
+    in-month rather than accumulating debt across months. Year-end leftover
+    is the unused/forfeit balance.
+
+    Shared with :func:`backend.engine.integration.seg._seg_tou_settlement`
+    — the math is identical; what differs is the public wrapper's regime
+    guard and the result type it constructs.
+    """
+    netted: list[MonthlyBill] = []
+    rollover = 0.0
+    annual_credit_applied = 0.0
+
+    for bill_month, credit_month in zip(annual_bill.monthly, monthly_credit, strict=True):
+        available = rollover + credit_month
+        if available >= 0:
+            applied = min(available, bill_month.energy_charge)
+            net_energy = bill_month.energy_charge - applied
+            rollover = available - applied
+            annual_credit_applied += applied
+        else:
+            net_energy = bill_month.energy_charge - available
+            annual_credit_applied += available
+            rollover = 0.0
+
+        netted.append(
+            MonthlyBill(
+                month=bill_month.month,
+                kwh_imported=bill_month.kwh_imported,
+                energy_charge=net_energy,
+                fixed_charge=bill_month.fixed_charge,
+                total=net_energy + bill_month.fixed_charge,
+            )
+        )
+
+    netted_bill = AnnualBill(
+        currency=annual_bill.currency,
+        monthly=netted,
+        annual_kwh_imported=annual_bill.annual_kwh_imported,
+        annual_energy_charge=sum(m.energy_charge for m in netted),
+        annual_fixed_charge=annual_bill.annual_fixed_charge,
+        annual_total=sum(m.total for m in netted),
+    )
+    return netted_bill, annual_credit_applied, rollover
+
+
 class NbtSettlement(BaseModel):
     """The netted bill plus the rollover bookkeeping the audit surfaces.
 
@@ -66,51 +120,12 @@ def compute_nbt_net_bill(
             f"compute_nbt_net_bill expects regime='nem_three_nbt' (got {export_credit.regime!r})"
         )
 
-    netted: list[MonthlyBill] = []
-    rollover = 0.0
-    annual_credit_applied = 0.0
-
-    for bill_month, credit_month in zip(
-        annual_bill.monthly,
-        export_credit.monthly_credit,
-        strict=True,
-    ):
-        available = rollover + credit_month  # signed
-        if available >= 0:
-            applied = min(available, bill_month.energy_charge)
-            net_energy = bill_month.energy_charge - applied
-            rollover = available - applied
-            annual_credit_applied += applied
-        else:
-            # Negative balance settles in this month: customer pays the
-            # extra; nothing rolls forward.
-            net_energy = bill_month.energy_charge - available  # adds |available|
-            annual_credit_applied += available  # signed (negative)
-            rollover = 0.0
-
-        netted.append(
-            MonthlyBill(
-                month=bill_month.month,
-                kwh_imported=bill_month.kwh_imported,
-                energy_charge=net_energy,
-                fixed_charge=bill_month.fixed_charge,
-                total=net_energy + bill_month.fixed_charge,
-            )
-        )
-
-    annual_credit_unused = rollover
-
-    netted_bill = AnnualBill(
-        currency=annual_bill.currency,
-        monthly=netted,
-        annual_kwh_imported=annual_bill.annual_kwh_imported,
-        annual_energy_charge=sum(m.energy_charge for m in netted),
-        annual_fixed_charge=annual_bill.annual_fixed_charge,
-        annual_total=sum(m.total for m in netted),
+    netted_bill, applied, unused = run_monthly_rollover(
+        annual_bill=annual_bill,
+        monthly_credit=export_credit.monthly_credit,
     )
-
     return NbtSettlement(
         bill=netted_bill,
-        annual_credit_applied=annual_credit_applied,
-        annual_credit_unused=annual_credit_unused,
+        annual_credit_applied=applied,
+        annual_credit_unused=unused,
     )
