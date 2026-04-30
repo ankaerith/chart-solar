@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from backend.engine.integration.nbt import run_monthly_rollover
 from backend.engine.steps.export_credit import ExportCreditResult
 from backend.engine.steps.tariff import AnnualBill, MonthlyBill
 
@@ -133,56 +134,16 @@ def _seg_tou_settlement(
     annual_bill: AnnualBill,
     export_credit: ExportCreditResult,
 ) -> SegSettlement:
-    """SEG-TOU monthly rollover: same shape as NBT, no NSC concept.
-
-    Within-month: credit offsets that month's energy charge, surplus
-    rolls forward, negative-credit hours settle in-month rather than
-    accumulating debt across months. At year-end any rollover surplus
-    forfeits — UK suppliers don't expose an NSC-equivalent payout rate
-    on TOU SEG.
-    """
-    netted: list[MonthlyBill] = []
-    rollover = 0.0
-    annual_credit_applied = 0.0
-
-    for bill_month, credit_month in zip(
-        annual_bill.monthly,
-        export_credit.monthly_credit,
-        strict=True,
-    ):
-        available = rollover + credit_month  # signed
-        if available >= 0:
-            applied = min(available, bill_month.energy_charge)
-            net_energy = bill_month.energy_charge - applied
-            rollover = available - applied
-            annual_credit_applied += applied
-        else:
-            # Negative balance settles in-month: customer pays the extra.
-            net_energy = bill_month.energy_charge - available  # subtracts a negative
-            annual_credit_applied += available  # signed (negative)
-            rollover = 0.0
-
-        netted.append(
-            MonthlyBill(
-                month=bill_month.month,
-                kwh_imported=bill_month.kwh_imported,
-                energy_charge=net_energy,
-                fixed_charge=bill_month.fixed_charge,
-                total=net_energy + bill_month.fixed_charge,
-            )
-        )
-
+    """SEG-TOU monthly rollover: same math as NBT (shared helper),
+    no NSC concept — leftover rollover just forfeits."""
+    netted_bill, applied, unused = run_monthly_rollover(
+        annual_bill=annual_bill,
+        monthly_credit=export_credit.monthly_credit,
+    )
     return SegSettlement(
-        bill=AnnualBill(
-            currency=annual_bill.currency,
-            monthly=netted,
-            annual_kwh_imported=annual_bill.annual_kwh_imported,
-            annual_energy_charge=sum(m.energy_charge for m in netted),
-            annual_fixed_charge=annual_bill.annual_fixed_charge,
-            annual_total=sum(m.total for m in netted),
-        ),
-        annual_credit_applied=annual_credit_applied,
-        annual_credit_unused=rollover,
+        bill=netted_bill,
+        annual_credit_applied=applied,
+        annual_credit_unused=unused,
     )
 
 

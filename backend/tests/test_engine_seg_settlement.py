@@ -1,4 +1,4 @@
-"""UK SEG annual settlement netting (chart-solar-cm50).
+"""UK SEG annual settlement netting.
 
 Pins the integration semantics between the standalone tariff bill
 (``engine.tariff``) and the SEG export credit (``engine.export_credit``):
@@ -16,6 +16,7 @@ from backend.engine.integration.seg import (
 )
 from backend.engine.steps.export_credit import ExportCreditResult
 from backend.engine.steps.tariff import AnnualBill, MonthlyBill
+from backend.engine.types import ExportRegime
 
 
 def _bill(monthly_charges: list[float], *, fixed: float = 5.0, currency: str = "GBP") -> AnnualBill:
@@ -41,7 +42,7 @@ def _bill(monthly_charges: list[float], *, fixed: float = 5.0, currency: str = "
     )
 
 
-def _credit(monthly_credits: list[float], *, regime: str) -> ExportCreditResult:
+def _credit(monthly_credits: list[float], *, regime: ExportRegime) -> ExportCreditResult:
     if len(monthly_credits) != 12:
         raise AssertionError("provide 12 monthly credits")
     return ExportCreditResult(
