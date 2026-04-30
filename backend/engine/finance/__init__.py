@@ -4,6 +4,8 @@ The pipeline's `finance` step composes the modules here:
 
 * `amortization` — fixed + variable-rate loan schedules
 * `cashflow` — NPV / IRR / MIRR / discounted payback / LCOE / crossover
+* `opportunity_cost` — HYSA / mortgage / S&P overlays for the
+  capital-allocation chart
 * `sale` — probability-weighted sale-scenario NPV with LBNL Hoen
   home-value uplift
 
@@ -28,6 +30,15 @@ from backend.engine.finance.cashflow import (
     mirr,
     npv,
 )
+from backend.engine.finance.opportunity_cost import (
+    HYSA_BASELINE,
+    MORTGAGE_PAYDOWN_BASELINE,
+    SP500_BASELINE,
+    CapitalAllocationBaseline,
+    alternative_wealth_path,
+    compare_npv_at_alternatives,
+    cumulative_solar_wealth,
+)
 from backend.engine.finance.sale import (
     HoldYearProbability,
     SaleScenarioInputs,
@@ -40,14 +51,21 @@ from backend.engine.finance.sale import (
 __all__ = [
     "AmortizationRow",
     "AmortizationSchedule",
+    "CapitalAllocationBaseline",
+    "HYSA_BASELINE",
     "HoldYearProbability",
+    "MORTGAGE_PAYDOWN_BASELINE",
+    "SP500_BASELINE",
     "SaleScenarioInputs",
     "SaleScenarioOutcome",
     "SaleScenarioResult",
+    "alternative_wealth_path",
     "amortize",
     "amortize_variable",
     "annualized_return",
+    "compare_npv_at_alternatives",
     "crossover_year",
+    "cumulative_solar_wealth",
     "dealer_fee_effective_apr",
     "discounted_payback_years",
     "expected_sale_npv",
