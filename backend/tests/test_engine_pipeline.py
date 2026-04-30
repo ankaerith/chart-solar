@@ -21,6 +21,8 @@ from backend.engine.inputs import (
     FinancialInputs,
     ForecastInputs,
     LoanInputs,
+    NemOneForOneConfig,
+    SegFlatConfig,
     SystemInputs,
     TariffInputs,
 )
@@ -125,7 +127,7 @@ def test_pipeline_credits_seg_flat_export_when_consumption_is_zero() -> None:
     """SEG-flat: every exported kWh credits at a single rate. With zero
     consumption, exported kWh ≈ produced kWh, so annual credit ≈ AC yield × rate."""
     schedule = _flat_tariff(rate=0.16, fixed=10.0)
-    export = ExportCreditInputs(regime="seg_flat", flat_rate_per_kwh=0.05)
+    export = SegFlatConfig(flat_rate_per_kwh=0.05)
     inputs = _baseline_inputs(schedule=schedule, export_credit=export)
     tmy = synthetic_tmy(lat=inputs.system.lat, lon=inputs.system.lon)
 
@@ -147,7 +149,7 @@ def test_pipeline_uses_consumption_when_provided() -> None:
     export-credit adapters in lock-step."""
     even_load = ConsumptionInputs(annual_kwh=12_000.0)
     schedule = _flat_tariff(rate=0.20, fixed=10.0)
-    export = ExportCreditInputs(regime="seg_flat", flat_rate_per_kwh=0.05)
+    export = SegFlatConfig(flat_rate_per_kwh=0.05)
     inputs = _baseline_inputs(
         schedule=schedule,
         export_credit=export,
@@ -194,7 +196,7 @@ def test_pipeline_runs_finance_for_a_realistic_residential_system() -> None:
     discount, IRR around 7-15 %, payback inside the hold window.
     """
     schedule = _flat_tariff(rate=0.18, fixed=10.0)
-    export = ExportCreditInputs(regime="nem_one_for_one")
+    export = NemOneForOneConfig()
     consumption = ConsumptionInputs(annual_kwh=11_000.0)
     financial = FinancialInputs(
         hold_years=25,
@@ -294,7 +296,7 @@ def test_pipeline_artifacts_only_carry_step_outputs() -> None:
     tariff and export-credit adapters; exposing them invites callers
     to depend on plumbing details that should stay free to refactor."""
     schedule = _flat_tariff()
-    export = ExportCreditInputs(regime="seg_flat", flat_rate_per_kwh=0.05)
+    export = SegFlatConfig(flat_rate_per_kwh=0.05)
     inputs = _baseline_inputs(schedule=schedule, export_credit=export)
     tmy = synthetic_tmy(lat=inputs.system.lat, lon=inputs.system.lon)
 

@@ -19,6 +19,12 @@ kWh is worth back to the homeowner:
 This step is pure-math. The hourly avoided-cost vector for NBT and
 the SEG supplier rate registry are part of the data layer; this
 module just consumes them.
+
+Each regime is modelled as a Pydantic discriminated-union variant
+that carries only its required inputs and its own ``apply()`` method.
+The dispatcher (``apply_export_credit``) is a one-line delegator —
+parse-time validation refuses bad combinations like "regime=seg_flat
+with hourly_rate_per_kwh set" before the engine sees them.
 """
 
 from __future__ import annotations
@@ -289,52 +295,52 @@ def apply_nem_one_for_one(
 @register("engine.export_credit")
 def apply_export_credit(
     *,
-    regime: ExportRegime,
+    config: ExportCreditConfig,
     hourly_export_kwh: list[float],
     tariff: TariffSchedule | None = None,
-    hourly_avoided_cost_per_kwh: list[float] | None = None,
-    hourly_rate_per_kwh: list[float] | None = None,
-    rate_per_kwh: float | None = None,
     hourly_net_load_kwh: list[float] | None = None,
 ) -> ExportCreditResult:
     """Single dispatch entry point for the four export-credit regimes.
 
-    Each regime needs different inputs (NEM 1:1 reads back the import
-    tariff; NBT and SEG-TOU need an hourly rate vector; SEG-flat needs
-    a scalar). The pipeline registers this function under
-    ``engine.export_credit`` and supplies the regime + the matching
-    payload — keeping the registry single-keyed avoids the need to
-    fan ``engine.export_credit.<regime>`` keys through tier configs.
+    Delegates to ``config.apply(...)``; each variant carries its own
+    apply method so this function is pure routing. Validation of
+    regime/field consistency happens at parse time inside Pydantic.
 
     ``hourly_net_load_kwh`` (signed: positive = import, negative = export)
     is required only for **NEM 1:1 with a tiered tariff** — the
     tier-walking netting can't be derived from exports alone. Other
     regime/structure pairs ignore it.
     """
-    if regime == "nem_one_for_one":
-        if tariff is None:
-            raise ValueError("nem_one_for_one regime requires `tariff`")
-        return apply_nem_one_for_one(
-            hourly_export_kwh=hourly_export_kwh,
-            tariff=tariff,
-            hourly_net_load_kwh=hourly_net_load_kwh,
-        )
-    if regime == "nem_three_nbt":
-        if hourly_avoided_cost_per_kwh is None:
-            raise ValueError("nem_three_nbt regime requires `hourly_avoided_cost_per_kwh`")
-        return apply_nem_three_nbt(
-            hourly_export_kwh=hourly_export_kwh,
-            hourly_avoided_cost_per_kwh=hourly_avoided_cost_per_kwh,
-        )
-    if regime == "seg_flat":
-        if rate_per_kwh is None:
-            raise ValueError("seg_flat regime requires `rate_per_kwh`")
-        return apply_seg_flat(hourly_export_kwh=hourly_export_kwh, rate_per_kwh=rate_per_kwh)
-    if regime == "seg_tou":
-        if hourly_rate_per_kwh is None:
-            raise ValueError("seg_tou regime requires `hourly_rate_per_kwh`")
-        return apply_seg_tou(
-            hourly_export_kwh=hourly_export_kwh,
-            hourly_rate_per_kwh=hourly_rate_per_kwh,
-        )
-    raise ValueError(f"unknown export-credit regime: {regime!r}")
+    return config.apply(
+        hourly_export_kwh=hourly_export_kwh,
+        tariff=tariff,
+        hourly_net_load_kwh=hourly_net_load_kwh,
+    )
+
+
+# Re-exported here so callers can grab the union from one place. The
+# variant classes themselves live in ``backend.engine.inputs`` because
+# they are part of the IO boundary — putting them here would create
+# an import cycle (engine.steps.* eagerly load each step module, which
+# would re-enter inputs.py).
+from backend.engine.inputs import (  # noqa: E402
+    ExportCreditConfig,
+    NbtConfig,
+    NemOneForOneConfig,
+    SegFlatConfig,
+    SegTouConfig,
+)
+
+__all__ = [
+    "ExportCreditConfig",
+    "ExportCreditResult",
+    "NbtConfig",
+    "NemOneForOneConfig",
+    "SegFlatConfig",
+    "SegTouConfig",
+    "apply_export_credit",
+    "apply_nem_one_for_one",
+    "apply_nem_three_nbt",
+    "apply_seg_flat",
+    "apply_seg_tou",
+]

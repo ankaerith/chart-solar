@@ -9,6 +9,10 @@ from backend.engine.inputs import (
     ExportCreditInputs,
     FinancialInputs,
     ForecastInputs,
+    NbtConfig,
+    NemOneForOneConfig,
+    SegFlatConfig,
+    SegTouConfig,
     SystemInputs,
     TariffInputs,
 )
@@ -79,18 +83,8 @@ def test_nbt_caps_credit_below_seg_tou_when_surplus_exceeds_import_bill() -> Non
     # vastly exceeds the bill, so the cap binds and forfeit happens.
     huge_rates = [1.0] * HOURS_PER_TMY
 
-    nbt = _run(
-        ExportCreditInputs(
-            regime="nem_three_nbt",
-            hourly_avoided_cost_per_kwh=huge_rates,
-        )
-    )
-    seg = _run(
-        ExportCreditInputs(
-            regime="seg_tou",
-            hourly_rate_per_kwh=huge_rates,
-        )
-    )
+    nbt = _run(NbtConfig(hourly_avoided_cost_per_kwh=huge_rates))
+    seg = _run(SegTouConfig(hourly_rate_per_kwh=huge_rates))
 
     # Bill avoidance is regime-agnostic — same import-side savings for
     # both runs (same consumption, same production, same tariff).
@@ -111,12 +105,7 @@ def test_nbt_credit_per_year_is_bounded_by_with_solar_energy_charge() -> None:
     rolled up annually, applied credit can't exceed the with-solar
     bill's annual energy charge."""
     rates = [0.30] * HOURS_PER_TMY
-    finance = _run(
-        ExportCreditInputs(
-            regime="nem_three_nbt",
-            hourly_avoided_cost_per_kwh=rates,
-        )
-    )
+    finance = _run(NbtConfig(hourly_avoided_cost_per_kwh=rates))
 
     # The flat tariff makes baseline energy = consumption × rate; the
     # with-solar energy charge is what's left after bill avoidance.
@@ -133,12 +122,12 @@ def test_nbt_credit_per_year_is_bounded_by_with_solar_energy_charge() -> None:
 
 def test_nem_one_for_one_regime_is_unaffected_by_nbt_branch() -> None:
     """Regression guard — NEM 1:1 must skip the NBT cap path."""
-    finance = _run(ExportCreditInputs(regime="nem_one_for_one"))
+    finance = _run(NemOneForOneConfig())
     assert any(c > 0 for c in finance.export_credit_per_year)
     assert finance.npv > 0.0
 
 
 def test_seg_flat_regime_is_unaffected_by_nbt_branch() -> None:
     """Regression guard — SEG-flat pays cash; no within-month netting."""
-    finance = _run(ExportCreditInputs(regime="seg_flat", flat_rate_per_kwh=0.05))
+    finance = _run(SegFlatConfig(flat_rate_per_kwh=0.05))
     assert any(c > 0 for c in finance.export_credit_per_year)

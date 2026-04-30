@@ -130,12 +130,9 @@ def _finance_year_terms(
         return bill_avoidance, 0.0
 
     credit = apply_export_credit(
-        regime=export_config.regime,
+        config=export_config,
         hourly_export_kwh=_hourly_export(net_load),
         tariff=schedule,
-        hourly_avoided_cost_per_kwh=export_config.hourly_avoided_cost_per_kwh,
-        rate_per_kwh=export_config.flat_rate_per_kwh,
-        hourly_rate_per_kwh=export_config.hourly_rate_per_kwh,
         hourly_net_load_kwh=net_load,
     )
 
