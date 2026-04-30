@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     openmeteo_paid_enabled: bool = False
     openmeteo_paid_api_key: str | None = None
 
+    # URDB (NREL Utility Rate Database) — same NREL developer key works
+    # for both NSRDB and URDB, but a dedicated setting keeps the lookup
+    # path obvious.
+    urdb_api_key: str | None = None
+
     # Sentry
     sentry_dsn: str | None = None
 
