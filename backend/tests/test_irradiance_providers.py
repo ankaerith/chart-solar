@@ -118,6 +118,42 @@ def test_parse_pvgis_json_rejects_short_payload() -> None:
         parse_pvgis_json(payload, source_lat=0.0, source_lon=0.0)
 
 
+def test_parse_pvgis_json_without_rh_field_leaves_monthly_rh_unset() -> None:
+    """Older cached PVGIS payloads without the `RH` column keep monthly
+    RH ``None`` — schema is permissive and downstream soiling no-ops."""
+    payload = _synthetic_pvgis_payload(hours=HOURS_PER_TMY, elevation=15.0)
+    tmy = parse_pvgis_json(payload, source_lat=51.5074, source_lon=-0.1278)
+    assert tmy.relative_humidity_pct_per_month is None
+
+
+def test_parse_pvgis_json_aggregates_native_rh_into_monthly_mean() -> None:
+    """Constant 75% RH across the year → 75.0 in every monthly slot."""
+    payload = _synthetic_pvgis_payload(
+        hours=HOURS_PER_TMY,
+        elevation=15.0,
+        include_rh=True,
+        rh_value=75.0,
+    )
+    tmy = parse_pvgis_json(payload, source_lat=51.5074, source_lon=-0.1278)
+    assert tmy.relative_humidity_pct_per_month is not None
+    assert len(tmy.relative_humidity_pct_per_month) == 12
+    for month_rh in tmy.relative_humidity_pct_per_month:
+        assert month_rh == pytest.approx(75.0)
+
+
+def test_parse_pvgis_json_leaves_precip_and_snow_unset() -> None:
+    """PVGIS doesn't carry precipitation or snowfall — option (b)
+    of chart-solar-ifv8: leave None, let the engine no-op."""
+    payload = _synthetic_pvgis_payload(
+        hours=HOURS_PER_TMY,
+        elevation=15.0,
+        include_rh=True,
+    )
+    tmy = parse_pvgis_json(payload, source_lat=51.5074, source_lon=-0.1278)
+    assert tmy.precipitation_mm_per_month is None
+    assert tmy.snowfall_cm_per_month is None
+
+
 def test_parse_openmeteo_json_8760() -> None:
     payload = _synthetic_openmeteo_payload(hours=HOURS_PER_TMY, elevation=42.0)
     tmy = parse_openmeteo_json(payload, source_lat=-33.9249, source_lon=18.4241)
@@ -304,9 +340,16 @@ def _synthetic_nsrdb_csv(*, hours: int, elevation: float) -> str:
     return buf.getvalue()
 
 
-def _synthetic_pvgis_payload(*, hours: int, elevation: float) -> dict[str, Any]:
-    rows = [
-        {
+def _synthetic_pvgis_payload(
+    *,
+    hours: int,
+    elevation: float,
+    include_rh: bool = False,
+    rh_value: float = 70.0,
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for i, (m, d, h) in enumerate(_iter_hours(hours)):
+        row: dict[str, Any] = {
             "time": f"2020{m:02d}{d:02d}:{h:02d}00",
             "G(h)": float(i % 1000),
             "Gb(n)": float(i % 800),
@@ -314,8 +357,9 @@ def _synthetic_pvgis_payload(*, hours: int, elevation: float) -> dict[str, Any]:
             "T2m": 15.0,
             "WS10m": 4.0,
         }
-        for i, (m, d, h) in enumerate(_iter_hours(hours))
-    ]
+        if include_rh:
+            row["RH"] = rh_value
+        rows.append(row)
     return {
         "inputs": {
             "location": {"elevation": elevation},

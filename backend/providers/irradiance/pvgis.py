@@ -2,11 +2,19 @@
 
 Endpoint: https://re.jrc.ec.europa.eu/api/v5_2/tmy
 Output:  JSON with `outputs.tmy_hourly` — 8760 records keyed by `time`,
-         `G(h)` (GHI), `Gb(n)` (DNI), `Gd(h)` (DHI), `T2m`, `WS10m`.
+         `G(h)` (GHI), `Gb(n)` (DNI), `Gd(h)` (DHI), `T2m`, `WS10m`,
+         and `RH` (relative humidity, %).
 
 PVGIS automatically picks the most appropriate source for the location
 (SARAH2 / NSRDB / ERA5) and bakes the TMY across years 2005-2020 by
 default. We trust their selection — no UI knob for it at v1.
+
+Monthly aggregates: PVGIS's `RH` column populates
+``relative_humidity_pct_per_month`` so the HSU soiling step runs on
+UK/EU sites without a sibling provider call. PVGIS doesn't carry
+surface precipitation or snowfall — those fields stay ``None``
+(option (b) in chart-solar-ifv8) and the snow / soiling-precip paths
+no-op gracefully. A future ERA5-Land sibling lookup can populate them.
 """
 
 from __future__ import annotations
@@ -63,12 +71,20 @@ def parse_pvgis_json(
     dhi: list[float] = []
     temp: list[float] = []
     wind: list[float] = []
+    rh: list[float] = []
+    has_rh = bool(rows) and "RH" in rows[0]
     for row in rows:
         ghi.append(float(row["G(h)"]))
         dni.append(float(row["Gb(n)"]))
         dhi.append(float(row["Gd(h)"]))
         temp.append(float(row["T2m"]))
         wind.append(float(row["WS10m"]))
+        if has_rh:
+            rh.append(float(row["RH"]))
+
+    monthly_rh: list[float] | None = None
+    if has_rh and len(rh) == HOURS_PER_TMY:
+        monthly_rh = _aggregate_hourly_to_monthly_mean(rh)
 
     return TmyData(
         lat=source_lat,
@@ -82,4 +98,36 @@ def parse_pvgis_json(
         dhi_w_m2=dhi,
         temp_air_c=temp,
         wind_speed_m_s=wind,
+        relative_humidity_pct_per_month=monthly_rh,
     )
+
+
+_HOURS_PER_MONTH_NON_LEAP: tuple[int, ...] = (
+    31 * 24,
+    28 * 24,
+    31 * 24,
+    30 * 24,
+    31 * 24,
+    30 * 24,
+    31 * 24,
+    31 * 24,
+    30 * 24,
+    31 * 24,
+    30 * 24,
+    31 * 24,
+)
+
+
+def _aggregate_hourly_to_monthly_mean(values: list[float]) -> list[float]:
+    """Average an 8760-hour series into 12 monthly means.
+
+    Mirrors the helper in ``openmeteo.py`` — kept local here to keep
+    each provider self-contained and avoid cross-adapter imports.
+    """
+    out: list[float] = []
+    cursor = 0
+    for hours in _HOURS_PER_MONTH_NON_LEAP:
+        chunk = values[cursor : cursor + hours]
+        out.append(sum(chunk) / len(chunk))
+        cursor += hours
+    return out
