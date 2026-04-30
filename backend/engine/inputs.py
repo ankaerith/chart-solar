@@ -219,8 +219,39 @@ class TariffInputs(BaseModel):
     export_credit: ExportCreditConfig | None = None
 
 
+DispatchStrategy = Literal["self_consumption", "tou_arbitrage"]
+
+
+class BatteryInputs(BaseModel):
+    """Battery system parameters for the rule-based dispatch step.
+
+    Defaults are tuned to a typical residential lithium-ion install
+    (e.g. Powerwall 3): 13.5 kWh nameplate, ~95 % usable, ~90 %
+    round-trip efficiency, max ~5 kW continuous, and a 20 % reserve
+    held back for backup. Override any of these to fit a specific
+    product spec.
+
+    ``strategy`` selects the rule-based dispatch policy:
+
+    * ``self_consumption`` — charge whenever solar exports, discharge
+      to cover any import need. Maximises self-use, ignores tariff.
+    * ``tou_arbitrage`` — charge only off-peak, discharge only on-peak
+      (peak / off-peak inferred from the active TOU schedule). Falls
+      back to self-consumption when the schedule isn't TOU-shaped.
+    """
+
+    capacity_kwh: float = Field(13.5, gt=0.0)
+    usable_pct: float = Field(0.95, gt=0.0, le=1.0)
+    round_trip_efficiency: float = Field(0.90, gt=0.0, le=1.0)
+    max_charge_kw: float = Field(5.0, gt=0.0)
+    max_discharge_kw: float = Field(5.0, gt=0.0)
+    reserve_pct: float = Field(0.20, ge=0.0, le=1.0)
+    strategy: DispatchStrategy = "self_consumption"
+
+
 class ForecastInputs(BaseModel):
     system: SystemInputs
     financial: FinancialInputs
     tariff: TariffInputs
     consumption: ConsumptionInputs | None = None
+    battery: BatteryInputs | None = None
