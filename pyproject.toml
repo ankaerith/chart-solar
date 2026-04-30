@@ -31,6 +31,7 @@ dev = [
     "pip-licenses>=5.0",
     "pytest-cov>=7.1.0",
     "hypothesis>=6.140",
+    "import-linter>=2.5",
 ]
 
 [tool.ruff]
@@ -89,3 +90,52 @@ python_version = "3.12"
 strict = true
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
+
+[tool.importlinter]
+# Hard backend-layout rules from docs/ENGINEERING.md § Backend layout:
+# `engine/` and `domain/` are pure-function layers and must not reach
+# into orchestration/IO layers. CI runs this so violating PRs fail.
+root_packages = ["backend"]
+
+[[tool.importlinter.contracts]]
+# `engine.*` may not depend on the IO / orchestration layers. Keeps the
+# engine deterministic and re-runnable from a `(state) -> state` shell.
+# `providers/*` is currently imported by the engine for shared types
+# (TmyData, TariffSchedule, …) — that coupling is tracked in
+# chart-solar-av6u (relocate shared types to `domain/`) and tolerated
+# until then. Add `backend.domain` to `source_modules` when that
+# package lands.
+name = "engine is pure"
+type = "forbidden"
+source_modules = ["backend.engine"]
+forbidden_modules = [
+    "backend.api",
+    "backend.workers",
+    "backend.infra",
+    "backend.db",
+]
+# Engine imports `backend.providers.irradiance` for shared types
+# (TmyData, …); that subpackage's own adapters reach into
+# `backend.infra.http`. The engine never sees `infra` as a name itself,
+# so let import-linter follow that distinction instead of flagging the
+# transitive chain.
+allow_indirect_imports = "true"
+
+[[tool.importlinter.contracts]]
+# `api.*` shapes responses; long-running compute always goes through
+# the queue via a service. Today there are two direct hops into the
+# worker module that the API holds onto pending the `services/` layer
+# landing — they're listed in `ignore_imports` with bead links so any
+# *new* hop fails CI immediately.
+name = "api never imports workers directly"
+type = "forbidden"
+source_modules = ["backend.api"]
+forbidden_modules = ["backend.workers"]
+ignore_imports = [
+    # chart-solar-5itb — fold queue.enqueue_forecast behind
+    # services.forecast_service.submit() once `services/` lands.
+    "backend.api.forecast -> backend.workers.queue",
+    # chart-solar-5itb — same refactor: health check should call a
+    # services.health.queue_ok() probe rather than reach into rq.
+    "backend.api.health -> backend.workers.queue",
+]
