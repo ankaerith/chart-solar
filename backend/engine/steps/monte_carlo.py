@@ -125,13 +125,15 @@ def _scaled_dc(dc: DcProductionResult, scale: float) -> DcProductionResult:
     )
 
 
+#: P10 / P50 / P90 in one numpy call. Pulled out as a constant so every
+#: percentile reduction in this module keeps the same anchor points; the
+#: fan-chart UI assumes these three.
+_PERCENTILES: tuple[int, int, int] = (10, 50, 90)
+
+
 def _percentiles(values: list[float]) -> MonteCarloPercentiles:
-    arr = np.asarray(values)
-    return MonteCarloPercentiles(
-        p10=float(np.percentile(arr, 10)),
-        p50=float(np.percentile(arr, 50)),
-        p90=float(np.percentile(arr, 90)),
-    )
+    p10, p50, p90 = np.percentile(np.asarray(values), _PERCENTILES)
+    return MonteCarloPercentiles(p10=float(p10), p50=float(p50), p90=float(p90))
 
 
 def _aligned_cumulative(paths: list[list[float]]) -> np.ndarray:
@@ -244,12 +246,7 @@ def run_monte_carlo(
             continue
 
         npv_paths.append(result.npv)
-        running = 0.0
-        cumulative = []
-        for cf in result.per_year_cashflow:
-            running += cf
-            cumulative.append(running)
-        cumulative_paths.append(cumulative)
+        cumulative_paths.append(np.cumsum(result.per_year_cashflow).tolist())
         if result.discounted_payback_years is not None:
             payback_paths.append(result.discounted_payback_years)
 
@@ -257,11 +254,12 @@ def run_monte_carlo(
         raise RuntimeError(f"every Monte Carlo path failed ({failed}/{n})")
 
     cum_arr = _aligned_cumulative(cumulative_paths)
+    # Single percentile call per year (axis=0 reduces across paths) — three
+    # rows out, one per anchor point in _PERCENTILES.
+    cum_pct = np.percentile(cum_arr, _PERCENTILES, axis=0)
     cumulative_pct = [
         MonteCarloPercentiles(
-            p10=float(np.percentile(cum_arr[:, t], 10)),
-            p50=float(np.percentile(cum_arr[:, t], 50)),
-            p90=float(np.percentile(cum_arr[:, t], 90)),
+            p10=float(cum_pct[0, t]), p50=float(cum_pct[1, t]), p90=float(cum_pct[2, t])
         )
         for t in range(cum_arr.shape[1])
     ]
