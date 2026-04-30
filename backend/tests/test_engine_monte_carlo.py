@@ -16,9 +16,9 @@ import pytest
 
 from backend.engine.inputs import (
     ConsumptionInputs,
-    ExportCreditInputs,
     FinancialInputs,
     ForecastInputs,
+    SegFlatConfig,
     SystemInputs,
     TariffInputs,
 )
@@ -67,7 +67,7 @@ def _seeded_inputs() -> ForecastInputs:
         tariff=TariffInputs(
             country="US",
             schedule=_flat_tariff(),
-            export_credit=ExportCreditInputs(regime="seg_flat", flat_rate_per_kwh=0.05),
+            export_credit=SegFlatConfig(flat_rate_per_kwh=0.05),
         ),
         consumption=ConsumptionInputs(annual_kwh=20_000.0),
     )

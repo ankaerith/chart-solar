@@ -7,7 +7,17 @@ needs — fields here are intentionally optional so the chain runs in
 degenerate forms (no consumption ⇒ all production exports; no tariff
 schedule ⇒ tariff + export-credit steps are skipped; no system cost ⇒
 the finance step is skipped).
+
+The export-credit regime configs live here (rather than under
+``engine.steps.export_credit``) because eager-loading ``engine.steps``
+re-enters this module via ``dc_production`` etc. — keeping the config
+shapes at the IO boundary breaks that cycle. Each variant's ``apply()``
+method imports the engine math lazily.
 """
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -15,15 +25,122 @@ from backend.engine.types import ExportRegime
 from backend.providers.irradiance import HOURS_PER_TMY
 from backend.providers.tariff import TariffSchedule
 
+if TYPE_CHECKING:
+    from backend.engine.steps.export_credit import ExportCreditResult
+
+
 __all__ = [
     "ConsumptionInputs",
-    "ExportCreditInputs",
+    "ExportCreditConfig",
     "ExportRegime",
     "FinancialInputs",
     "ForecastInputs",
     "LoanInputs",
+    "NbtConfig",
+    "NemOneForOneConfig",
+    "SegFlatConfig",
+    "SegTouConfig",
     "SystemInputs",
     "TariffInputs",
+]
+
+
+class NemOneForOneConfig(BaseModel):
+    """NEM 1:1 retail-rate netting. Reads back the import tariff."""
+
+    regime: Literal["nem_one_for_one"] = "nem_one_for_one"
+
+    def apply(
+        self,
+        *,
+        hourly_export_kwh: list[float],
+        tariff: TariffSchedule | None = None,
+        hourly_net_load_kwh: list[float] | None = None,
+    ) -> ExportCreditResult:
+        from backend.engine.steps.export_credit import apply_nem_one_for_one
+
+        if tariff is None:
+            raise ValueError("nem_one_for_one regime requires `tariff`")
+        return apply_nem_one_for_one(
+            hourly_export_kwh=hourly_export_kwh,
+            tariff=tariff,
+            hourly_net_load_kwh=hourly_net_load_kwh,
+        )
+
+
+class NbtConfig(BaseModel):
+    """California NEM 3.0 / NBT. Credits at the CPUC ACC vector."""
+
+    regime: Literal["nem_three_nbt"] = "nem_three_nbt"
+    hourly_avoided_cost_per_kwh: list[float] = Field(
+        ..., min_length=HOURS_PER_TMY, max_length=HOURS_PER_TMY
+    )
+
+    def apply(
+        self,
+        *,
+        hourly_export_kwh: list[float],
+        tariff: TariffSchedule | None = None,
+        hourly_net_load_kwh: list[float] | None = None,
+    ) -> ExportCreditResult:
+        from backend.engine.steps.export_credit import apply_nem_three_nbt
+
+        return apply_nem_three_nbt(
+            hourly_export_kwh=hourly_export_kwh,
+            hourly_avoided_cost_per_kwh=self.hourly_avoided_cost_per_kwh,
+        )
+
+
+class SegFlatConfig(BaseModel):
+    """UK SEG with a single flat supplier rate."""
+
+    regime: Literal["seg_flat"] = "seg_flat"
+    flat_rate_per_kwh: float = Field(..., ge=0.0)
+
+    def apply(
+        self,
+        *,
+        hourly_export_kwh: list[float],
+        tariff: TariffSchedule | None = None,
+        hourly_net_load_kwh: list[float] | None = None,
+    ) -> ExportCreditResult:
+        from backend.engine.steps.export_credit import apply_seg_flat
+
+        return apply_seg_flat(
+            hourly_export_kwh=hourly_export_kwh,
+            rate_per_kwh=self.flat_rate_per_kwh,
+        )
+
+
+class SegTouConfig(BaseModel):
+    """UK SEG with an hourly TOU rate vector (Octopus Agile-style)."""
+
+    regime: Literal["seg_tou"] = "seg_tou"
+    hourly_rate_per_kwh: list[float] = Field(
+        ..., min_length=HOURS_PER_TMY, max_length=HOURS_PER_TMY
+    )
+
+    def apply(
+        self,
+        *,
+        hourly_export_kwh: list[float],
+        tariff: TariffSchedule | None = None,
+        hourly_net_load_kwh: list[float] | None = None,
+    ) -> ExportCreditResult:
+        from backend.engine.steps.export_credit import apply_seg_tou
+
+        return apply_seg_tou(
+            hourly_export_kwh=hourly_export_kwh,
+            hourly_rate_per_kwh=self.hourly_rate_per_kwh,
+        )
+
+
+#: Discriminated union over regime configs. Pydantic dispatches on
+#: ``regime`` at parse time so bad regime/field combinations fail
+#: before reaching the engine.
+ExportCreditConfig = Annotated[
+    NemOneForOneConfig | NbtConfig | SegFlatConfig | SegTouConfig,
+    Field(discriminator="regime"),
 ]
 
 
@@ -76,32 +193,11 @@ class ConsumptionInputs(BaseModel):
     annual_kwh: float | None = Field(None, ge=0.0)
 
 
-class ExportCreditInputs(BaseModel):
-    """Regime + the regime-specific data the export-credit step needs.
-
-    Each export-credit regime consumes a different shape of rate data:
-    NEM 1:1 reads back the import tariff (no extra fields here), NBT
-    needs the CPUC ACC vector, SEG-flat a scalar, SEG-TOU an hourly
-    vector. Required-vs-not is enforced by the dispatcher in
-    ``engine.steps.export_credit`` — these inputs are deliberately
-    optional so the schema can travel with any regime.
-    """
-
-    regime: ExportRegime
-    hourly_avoided_cost_per_kwh: list[float] | None = Field(
-        None, min_length=HOURS_PER_TMY, max_length=HOURS_PER_TMY
-    )
-    flat_rate_per_kwh: float | None = Field(None, ge=0.0)
-    hourly_rate_per_kwh: list[float] | None = Field(
-        None, min_length=HOURS_PER_TMY, max_length=HOURS_PER_TMY
-    )
-
-
 class TariffInputs(BaseModel):
     country: str = Field("US", min_length=2, max_length=2)
     utility: str | None = None
     schedule: TariffSchedule | None = None
-    export_credit: ExportCreditInputs | None = None
+    export_credit: ExportCreditConfig | None = None
 
 
 class ForecastInputs(BaseModel):

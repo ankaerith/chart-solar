@@ -41,7 +41,7 @@ from backend.engine.finance import (
     npv,
 )
 from backend.engine.inputs import (
-    ExportCreditInputs,
+    ExportCreditConfig,
     FinancialInputs,
     LoanInputs,
 )
@@ -109,7 +109,7 @@ def _finance_year_terms(
     hourly_ac_kw: list[float],
     degradation_factor: float,
     schedule: TariffSchedule,
-    export_config: ExportCreditInputs | None,
+    export_config: ExportCreditConfig | None,
 ) -> tuple[float, float]:
     """One year's (bill_avoidance, export_credit_dollars).
 
@@ -130,12 +130,9 @@ def _finance_year_terms(
         return bill_avoidance, 0.0
 
     credit = apply_export_credit(
-        regime=export_config.regime,
+        config=export_config,
         hourly_export_kwh=_hourly_export(net_load),
         tariff=schedule,
-        hourly_avoided_cost_per_kwh=export_config.hourly_avoided_cost_per_kwh,
-        rate_per_kwh=export_config.flat_rate_per_kwh,
-        hourly_rate_per_kwh=export_config.hourly_rate_per_kwh,
         hourly_net_load_kwh=net_load,
     )
 
@@ -206,7 +203,7 @@ def run_finance(
     dc: DcProductionResult,
     degradation: DegradationCurve,
     schedule: TariffSchedule,
-    export_credit: ExportCreditInputs | None = None,
+    export_credit: ExportCreditConfig | None = None,
 ) -> FinanceResult:
     """Compose the per-year cashflow stream and headline metrics.
 
@@ -214,7 +211,7 @@ def run_finance(
     residential solar's NPV, so a finance run without one would be a
     misleading half-answer. Export-credit input is optional; without it
     the model assumes the regime contributes zero (technically wrong for
-    SEG-flat households, but the absence of an ``ExportCreditInputs`` is
+    SEG-flat households, but the absence of an ``ExportCreditConfig`` is
     the caller's signal that they don't want export credit accounted
     for).
     """
