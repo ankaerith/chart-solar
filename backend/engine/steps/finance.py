@@ -113,27 +113,10 @@ def _finance_year_terms(
 ) -> tuple[float, float]:
     """One year's (bill_avoidance, export_credit_dollars).
 
-    Bill avoidance is always the import-side delta
-    ``baseline_total − with_solar_bill.annual_total`` — the money the
-    homeowner doesn't pay because solar covers part of the load.
-    Export credit is the cash returned for kWh that crossed the meter
-    outbound; the per-regime cap rules live in this branch.
-
-    Under NEM 3.0 / NBT the raw credit overstates: CPUC caps
-    within-month credit at the energy portion of that month's bill,
-    rolls surplus forward, and zeros out unused surplus at year-end.
-    ``compute_nbt_net_bill`` enforces those rules; we report the
-    ``annual_credit_applied`` slice — the part that actually reduced
-    bills — and let the unused surplus quietly forfeit. Bill
-    avoidance is unchanged across regimes; the regime-specific math
-    lives entirely on the credit line, which keeps cashflow
-    composition (``bill_avoidance + export_credit − opex − debt``)
-    uniform.
-
-    NEM 1:1 and SEG-flat / SEG-TOU keep the raw annual credit:
-    NEM 1:1's retail-rate credit is by construction always usable
-    against same-month consumption, and SEG regimes settle in cash
-    rather than against the import bill.
+    For NBT, run the raw credit through ``compute_nbt_net_bill`` so
+    the within-month cap + year-end forfeit apply; other regimes pass
+    through. Bill avoidance is always the pre-credit import delta —
+    keeping cashflow composition uniform across regimes.
     """
     net_load = _net_load_for_year(
         consumption=consumption,
