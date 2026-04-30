@@ -31,10 +31,9 @@ from backend.engine.steps.dc_production import DcProductionResult
 from backend.providers.irradiance import HOURS_PER_TMY, TmyData
 
 #: Canonical execution order. Pipeline iterates this list, skipping any
-#: key that is either unregistered (e.g. ``engine.finance`` until its
-#: orchestrator lands) or absent from the caller's requested feature
-#: set. Adding a step here is a contract change — update tier configs
-#: and regression fixtures alongside.
+#: key that is either unregistered or absent from the caller's requested
+#: feature set. Adding a step here is a contract change — update tier
+#: configs and regression fixtures alongside.
 ENGINE_STEP_ORDER: tuple[str, ...] = (
     "engine.irradiance",
     "engine.consumption",
@@ -42,6 +41,7 @@ ENGINE_STEP_ORDER: tuple[str, ...] = (
     "engine.degradation",
     "engine.tariff",
     "engine.export_credit",
+    "engine.finance",
 )
 
 
@@ -165,9 +165,32 @@ def _adapter_export_credit(state: ForecastState, fn: StepFn) -> None:
     )
 
 
+def _adapter_finance(state: ForecastState, fn: StepFn) -> None:
+    # Finance composes upstream artifacts; missing prerequisites mean
+    # the orchestrator can't produce a meaningful answer, so we skip
+    # silently — same degradation pattern as tariff/export_credit.
+    if state.inputs.financial.system_cost is None:
+        return
+    if state.inputs.tariff.schedule is None:
+        return
+    if "engine.dc_production" not in state.artifacts:
+        return
+    if "engine.degradation" not in state.artifacts:
+        return
+    state.artifacts["engine.finance"] = fn(
+        financial=state.inputs.financial,
+        consumption=state.artifacts["engine.consumption"],
+        dc=state.artifacts["engine.dc_production"],
+        degradation=state.artifacts["engine.degradation"],
+        schedule=state.inputs.tariff.schedule,
+        export_credit=state.inputs.tariff.export_credit,
+    )
+
+
 _ADAPTERS: dict[str, _StepAdapter] = {
     "engine.dc_production": _adapter_dc_production,
     "engine.degradation": _adapter_degradation,
     "engine.tariff": _adapter_tariff,
     "engine.export_credit": _adapter_export_credit,
+    "engine.finance": _adapter_finance,
 }
