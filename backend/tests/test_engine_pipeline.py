@@ -290,6 +290,88 @@ def test_finance_step_amortizes_a_loan_into_year_cashflows() -> None:
     assert cash_post_loan > cash_with_loan
 
 
+def test_finance_step_routes_variable_rate_loans_through_amortize_variable() -> None:
+    """An ARM-style loan with a mid-term rate reset must produce a
+    different per-month payment schedule than the fixed-rate
+    equivalent at the starting rate. Pins the dispatch path through
+    LoanInputs.monthly_rates → amortize_variable."""
+    schedule = _flat_tariff(rate=0.18)
+    consumption = ConsumptionInputs(annual_kwh=11_000.0)
+    term_months = 240
+
+    # 5/15 ARM: 5 years at 4%, then resets to 7% for the remaining 15.
+    monthly_rates = (
+        [0.04 / 12.0] * 60  # months 1–60
+        + [0.07 / 12.0] * (term_months - 60)
+    )
+    arm_financial = FinancialInputs(
+        hold_years=25,
+        discount_rate=0.06,
+        system_cost=22_000.0,
+        loan=LoanInputs(
+            principal=20_000.0,
+            monthly_rates=monthly_rates,
+            term_months=term_months,
+            down_payment=2_000.0,
+        ),
+    )
+    fixed_financial = FinancialInputs(
+        hold_years=25,
+        discount_rate=0.06,
+        system_cost=22_000.0,
+        loan=LoanInputs(
+            principal=20_000.0,
+            apr=0.04,
+            term_months=term_months,
+            down_payment=2_000.0,
+        ),
+    )
+
+    inputs_arm = _baseline_inputs(
+        schedule=schedule, consumption=consumption, financial=arm_financial
+    )
+    inputs_fixed = _baseline_inputs(
+        schedule=schedule, consumption=consumption, financial=fixed_financial
+    )
+    tmy = synthetic_tmy(lat=inputs_arm.system.lat, lon=inputs_arm.system.lon)
+
+    arm = run_forecast(inputs_arm, tmy=tmy).artifacts["engine.finance"]
+    fixed = run_forecast(inputs_fixed, tmy=tmy).artifacts["engine.finance"]
+    assert isinstance(arm, FinanceResult) and isinstance(fixed, FinanceResult)
+
+    # Same first-month payment (both at 4%); divergence after the
+    # reset at month 61.
+    assert arm.monthly_loan_payments[0] == pytest.approx(fixed.monthly_loan_payments[0])
+    assert arm.monthly_loan_payments[60] != pytest.approx(fixed.monthly_loan_payments[60])
+    # Higher post-reset rate ⇒ ARM total interest > fixed-rate total.
+    assert sum(arm.monthly_loan_payments) > sum(fixed.monthly_loan_payments)
+
+
+def test_loan_inputs_rejects_both_apr_and_monthly_rates() -> None:
+    """Exactly one rate form must be set; setting both is a config bug."""
+    with pytest.raises(ValueError, match="exactly one"):
+        LoanInputs(
+            principal=10_000.0,
+            apr=0.05,
+            monthly_rates=[0.05 / 12.0] * 60,
+            term_months=60,
+        )
+
+
+def test_loan_inputs_rejects_neither_apr_nor_monthly_rates() -> None:
+    with pytest.raises(ValueError, match="exactly one"):
+        LoanInputs(principal=10_000.0, term_months=60)
+
+
+def test_loan_inputs_rejects_monthly_rates_length_mismatch() -> None:
+    with pytest.raises(ValueError, match="must equal term_months"):
+        LoanInputs(
+            principal=10_000.0,
+            monthly_rates=[0.05 / 12.0] * 30,
+            term_months=60,
+        )
+
+
 def test_pipeline_artifacts_only_carry_step_outputs() -> None:
     """The pipeline must not leak intermediate derived series (net load,
     hourly export) into ``artifacts``. Those are private to the

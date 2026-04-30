@@ -33,6 +33,7 @@ from pydantic import BaseModel, Field
 from backend.engine.finance import (
     AmortizationSchedule,
     amortize,
+    amortize_variable,
     crossover_year,
     discounted_payback_years,
     irr,
@@ -152,12 +153,21 @@ def _annual_loan_payments(loan: LoanInputs, hold_years: int) -> tuple[list[float
     analysis horizon — that residual debt isn't a year-N inflow problem
     for this step (the audit can flag the post-horizon balance
     separately).
+
+    Routes to ``amortize_variable`` when the loan carries a
+    ``monthly_rates`` vector (HELOC / ARM); otherwise the fixed-rate
+    closed-form ``amortize`` runs.
     """
-    schedule: AmortizationSchedule = amortize(
-        principal=loan.principal,
-        apr=loan.apr,
-        term_months=loan.term_months,
-    )
+    schedule: AmortizationSchedule
+    if loan.monthly_rates is not None:
+        schedule = amortize_variable(loan.principal, loan.monthly_rates)
+    else:
+        assert loan.apr is not None  # model validator guarantees one is set
+        schedule = amortize(
+            principal=loan.principal,
+            apr=loan.apr,
+            term_months=loan.term_months,
+        )
     monthly = [row.payment for row in schedule.rows]
     per_year: list[float] = []
     for year in range(hold_years):
