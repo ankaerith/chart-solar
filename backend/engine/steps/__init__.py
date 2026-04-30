@@ -36,6 +36,7 @@ from backend.engine.steps import (
     soiling,
     tariff,
     temperature,
+    tornado,
 )
 
 __all__ = [
@@ -52,4 +53,5 @@ __all__ = [
     "soiling",
     "tariff",
     "temperature",
+    "tornado",
 ]
