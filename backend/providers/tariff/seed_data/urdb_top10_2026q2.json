@@ -1,0 +1,387 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-04-29",
+  "snapshot_label": "2026-Q2",
+  "source": "NREL URDB (https://openei.org/wiki/Utility_Rate_Database) — CC0",
+  "refresh_cadence_days": 90,
+  "stale_warning_days": 90,
+  "notes": [
+    "Hand-curated snapshot of the most-common default residential rate per utility.",
+    "URDB lags real rate cases by weeks — flag entries older than refresh_cadence_days.",
+    "TOU period definitions use hour_mask[0..23]; weekend schedules omitted unless they",
+    "  differ from weekday (PG&E E-TOU-C uses the same hours every day, for example)."
+  ],
+  "utilities": [
+    {
+      "key": "PGE",
+      "name": "Pacific Gas & Electric",
+      "country": "US",
+      "state": "CA",
+      "rates": [
+        {
+          "name": "E-TOU-C residential default",
+          "urdb_label": "5cb0a0a35457a3527c1ad1f3",
+          "structure": "tou",
+          "currency": "USD",
+          "fixed_monthly_charge": 10.0,
+          "tou_periods": [
+            {
+              "name": "peak (4-9pm every day)",
+              "rate_per_kwh": 0.4063,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false,
+                true, true, true, true, true, false, false, false
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "off-peak (other hours weekday)",
+              "rate_per_kwh": 0.3611,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true,
+                false, false, false, false, false, true, true, true
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "peak (4-9pm weekend)",
+              "rate_per_kwh": 0.4063,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false,
+                true, true, true, true, true, false, false, false
+              ],
+              "is_weekday": false
+            },
+            {
+              "name": "off-peak (other hours weekend)",
+              "rate_per_kwh": 0.3611,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true,
+                false, false, false, false, false, true, true, true
+              ],
+              "is_weekday": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "SCE",
+      "name": "Southern California Edison",
+      "country": "US",
+      "state": "CA",
+      "rates": [
+        {
+          "name": "TOU-D-4-9PM residential default",
+          "urdb_label": "62b9b6005457a376a92f02b9",
+          "structure": "tou",
+          "currency": "USD",
+          "fixed_monthly_charge": 0.0,
+          "tou_periods": [
+            {
+              "name": "peak (4-9pm)",
+              "rate_per_kwh": 0.5092,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false,
+                true, true, true, true, true, false, false, false
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "off-peak weekday",
+              "rate_per_kwh": 0.3406,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true,
+                false, false, false, false, false, true, true, true
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "peak (4-9pm weekend)",
+              "rate_per_kwh": 0.5092,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false,
+                true, true, true, true, true, false, false, false
+              ],
+              "is_weekday": false
+            },
+            {
+              "name": "off-peak weekend",
+              "rate_per_kwh": 0.3406,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true,
+                false, false, false, false, false, true, true, true
+              ],
+              "is_weekday": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "SDGE",
+      "name": "San Diego Gas & Electric",
+      "country": "US",
+      "state": "CA",
+      "rates": [
+        {
+          "name": "TOU-DR1 residential default",
+          "urdb_label": "5e8b25ad5457a35a13b9a1f8",
+          "structure": "tou",
+          "currency": "USD",
+          "fixed_monthly_charge": 0.0,
+          "tou_periods": [
+            {
+              "name": "on-peak (4-9pm)",
+              "rate_per_kwh": 0.5475,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false,
+                true, true, true, true, true, false, false, false
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "off-peak weekday",
+              "rate_per_kwh": 0.4216,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true,
+                false, false, false, false, false, true, true, true
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "on-peak weekend",
+              "rate_per_kwh": 0.5475,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false,
+                true, true, true, true, true, false, false, false
+              ],
+              "is_weekday": false
+            },
+            {
+              "name": "off-peak weekend",
+              "rate_per_kwh": 0.4216,
+              "months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+              "hour_mask": [
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true,
+                false, false, false, false, false, true, true, true
+              ],
+              "is_weekday": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "PSE",
+      "name": "Puget Sound Energy",
+      "country": "US",
+      "state": "WA",
+      "rates": [
+        {
+          "name": "Schedule 7 residential",
+          "urdb_label": "5b9c10925457a3492f1f30e0",
+          "structure": "tiered",
+          "currency": "USD",
+          "fixed_monthly_charge": 7.84,
+          "tiered_blocks": [
+            { "rate_per_kwh": 0.105, "up_to_kwh_per_month": 600 },
+            { "rate_per_kwh": 0.131, "up_to_kwh_per_month": null }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "XCEL_CO",
+      "name": "Xcel Energy (Colorado)",
+      "country": "US",
+      "state": "CO",
+      "rates": [
+        {
+          "name": "Residential R schedule",
+          "urdb_label": "5b9c10925457a3492f1f3100",
+          "structure": "tiered",
+          "currency": "USD",
+          "fixed_monthly_charge": 9.50,
+          "tiered_blocks": [
+            { "rate_per_kwh": 0.135, "up_to_kwh_per_month": 500 },
+            { "rate_per_kwh": 0.165, "up_to_kwh_per_month": null }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "FPL",
+      "name": "Florida Power & Light",
+      "country": "US",
+      "state": "FL",
+      "rates": [
+        {
+          "name": "RS-1 residential service",
+          "urdb_label": "62b9b6005457a376a92f02c0",
+          "structure": "flat",
+          "currency": "USD",
+          "fixed_monthly_charge": 9.18,
+          "flat_rate_per_kwh": 0.122
+        }
+      ]
+    },
+    {
+      "key": "DUKE_NC",
+      "name": "Duke Energy Carolinas (NC)",
+      "country": "US",
+      "state": "NC",
+      "rates": [
+        {
+          "name": "Residential service",
+          "urdb_label": "62b9b6005457a376a92f02c5",
+          "structure": "flat",
+          "currency": "USD",
+          "fixed_monthly_charge": 14.00,
+          "flat_rate_per_kwh": 0.115
+        }
+      ]
+    },
+    {
+      "key": "APS",
+      "name": "Arizona Public Service",
+      "country": "US",
+      "state": "AZ",
+      "rates": [
+        {
+          "name": "R-Basic residential",
+          "urdb_label": "62b9b6005457a376a92f02d0",
+          "structure": "tiered",
+          "currency": "USD",
+          "fixed_monthly_charge": 13.32,
+          "tiered_blocks": [
+            { "rate_per_kwh": 0.115, "up_to_kwh_per_month": 400 },
+            { "rate_per_kwh": 0.137, "up_to_kwh_per_month": null }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "SRP",
+      "name": "Salt River Project",
+      "country": "US",
+      "state": "AZ",
+      "rates": [
+        {
+          "name": "E-23 TOU residential",
+          "urdb_label": "5e8b25ad5457a35a13b9a200",
+          "structure": "tou",
+          "currency": "USD",
+          "fixed_monthly_charge": 32.44,
+          "tou_periods": [
+            {
+              "name": "summer on-peak (May-Oct, 2-8pm weekday)",
+              "rate_per_kwh": 0.301,
+              "months": [5, 6, 7, 8, 9, 10],
+              "hour_mask": [
+                false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, true, true,
+                true, true, true, true, false, false, false, false
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "summer off-peak weekday",
+              "rate_per_kwh": 0.082,
+              "months": [5, 6, 7, 8, 9, 10],
+              "hour_mask": [
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, false, false,
+                false, false, false, false, true, true, true, true
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "summer weekend",
+              "rate_per_kwh": 0.082,
+              "months": [5, 6, 7, 8, 9, 10],
+              "hour_mask": [
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true
+              ],
+              "is_weekday": false
+            },
+            {
+              "name": "winter on-peak (Nov-Apr, 5-9am + 5-9pm weekday)",
+              "rate_per_kwh": 0.158,
+              "months": [1, 2, 3, 4, 11, 12],
+              "hour_mask": [
+                false, false, false, false, false, true, true, true,
+                true, false, false, false, false, false, false, false,
+                false, true, true, true, true, false, false, false
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "winter off-peak weekday",
+              "rate_per_kwh": 0.075,
+              "months": [1, 2, 3, 4, 11, 12],
+              "hour_mask": [
+                true, true, true, true, true, false, false, false,
+                false, true, true, true, true, true, true, true,
+                true, false, false, false, false, true, true, true
+              ],
+              "is_weekday": true
+            },
+            {
+              "name": "winter weekend",
+              "rate_per_kwh": 0.075,
+              "months": [1, 2, 3, 4, 11, 12],
+              "hour_mask": [
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true,
+                true, true, true, true, true, true, true, true
+              ],
+              "is_weekday": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "CONED",
+      "name": "Consolidated Edison (NYC)",
+      "country": "US",
+      "state": "NY",
+      "rates": [
+        {
+          "name": "SC-1 residential",
+          "urdb_label": "5b9c10925457a3492f1f3120",
+          "structure": "flat",
+          "currency": "USD",
+          "fixed_monthly_charge": 19.16,
+          "flat_rate_per_kwh": 0.319
+        }
+      ]
+    }
+  ]
+}
