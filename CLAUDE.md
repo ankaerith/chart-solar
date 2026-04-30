@@ -50,6 +50,21 @@ bd close <id>         # Complete work
 <!-- END BEADS INTEGRATION -->
 
 
+## Quality gates
+
+Before committing backend changes, run all four gates locally — CI runs the same set and `ruff format --check` is easy to miss because `ruff check` doesn't cover formatting:
+
+```bash
+uv run ruff check backend/         # lint
+uv run ruff format --check backend/  # formatting (separate from lint!)
+uv run mypy backend/               # strict types
+uv run pytest --cov                # tests + coverage gate
+```
+
+If `ruff format --check` flags anything, run `uv run ruff format backend/` to fix in place. Do not push without all four gates green.
+
+For the frontend, the equivalents are `bun run lint`, `bun run typecheck`, `bun run build`.
+
 ## Where to find things
 
 - **Strategy**: [`VISION.md`](VISION.md) — wins on conflicts.
