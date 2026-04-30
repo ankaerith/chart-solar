@@ -4,10 +4,6 @@ The worker is responsible for the network-IO portion of a forecast (fetching
 TMY weather data) and then handing the pre-fetched ``TmyData`` to the
 sync engine pipeline. Keeping the engine sync lets it run inside RQ
 without an event loop and stay easily testable with synthetic weather.
-
-TMY responses are cached in Postgres bucketed by 4-decimal lat/lon ×
-provider source; subsequent forecasts at the same bucket reuse the
-cached payload. See ``backend.db.tmy_cache`` for the schema + helpers.
 """
 
 import asyncio
@@ -50,9 +46,7 @@ def _fetch_tmy(inputs: ForecastInputs) -> TmyData:
     """Resolve the TMY for this forecast's lat/lon, hitting the bucketed
     Postgres cache first.
 
-    The auto-router decides which provider's slice to consult; on a
-    miss we call the live provider and write the result back. Wrapped
-    in ``asyncio.run`` because RQ workers run sync but both the
+    Wrapped in ``asyncio.run`` because RQ workers run sync but both the
     irradiance Protocol and the AsyncSession-based cache are async.
     """
     return asyncio.run(_fetch_tmy_async(inputs))
@@ -61,6 +55,8 @@ def _fetch_tmy(inputs: ForecastInputs) -> TmyData:
 async def _fetch_tmy_async(inputs: ForecastInputs) -> TmyData:
     provider = pick_provider(inputs.system.lat, inputs.system.lon)
 
+    # Lookup + store run in separate sessions so we don't hold a DB
+    # connection across the provider's HTTP fetch (30-60s).
     async with _db.SessionLocal() as session:
         cached = await lookup_cached_tmy(
             session,

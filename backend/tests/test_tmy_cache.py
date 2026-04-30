@@ -1,15 +1,4 @@
-"""Postgres-backed TMY cache (chart-solar-wx1).
-
-Covers three layers:
-
-1. ``bucket_lat_lon`` rounds to 4 decimal places exactly across
-   roundtrips through Decimal — float-equality false misses are the
-   exact failure mode we're guarding against.
-2. ``store_cached_tmy`` + ``lookup_cached_tmy`` UPSERT roundtrip
-   (re-fetching a bucket overwrites the prior row, doesn't duplicate).
-3. ``forecast_worker._fetch_tmy_async`` consults the cache before the
-   provider — second call for the same bucket skips the network.
-"""
+"""Postgres-backed TMY cache."""
 
 from __future__ import annotations
 
@@ -56,10 +45,7 @@ async def clean_tmy_cache() -> AsyncIterator[None]:
 
 
 def _sample_tmy(*, lat: float, lon: float, source: IrradianceSource) -> TmyData:
-    """Build a TmyData by retagging the synthetic clear-sky generator —
-    sidesteps the network without losing the channel-length validation."""
-    base = synthetic_tmy(lat=lat, lon=lon)
-    return base.model_copy(update={"source": source, "fetched_at": datetime.now(UTC)})
+    return synthetic_tmy(lat=lat, lon=lon).model_copy(update={"source": source})
 
 
 # ---- bucket math ------------------------------------------------------
@@ -100,14 +86,13 @@ def test_bucket_lat_lon_distinguishes_at_eleven_meters() -> None:
 
 
 def test_attribution_registry_covers_every_source() -> None:
-    """The IrradianceSource Literal lists three providers; the
-    attribution registry must carry one entry per source so a
-    ``store_cached_tmy`` call never KeyErrors at runtime."""
+    """Every IrradianceSource needs an entry — store_cached_tmy
+    KeyErrors at runtime if a source has no attribution."""
     expected_sources = {"nsrdb", "pvgis", "openmeteo"}
     assert set(IRRADIANCE_ATTRIBUTION.keys()) == expected_sources
-    for license_str, attribution in IRRADIANCE_ATTRIBUTION.values():
-        assert license_str
-        assert attribution
+    for attr in IRRADIANCE_ATTRIBUTION.values():
+        assert attr.license
+        assert attr.attribution
 
 
 # ---- store / lookup roundtrip ---------------------------------------
@@ -190,9 +175,9 @@ async def test_store_writes_attribution_metadata(clean_tmy_cache: None) -> None:
             )
         ).one()
 
-    expected_license, expected_attribution = IRRADIANCE_ATTRIBUTION["openmeteo"]
-    assert row_attrs[0] == expected_license
-    assert row_attrs[1] == expected_attribution
+    expected = IRRADIANCE_ATTRIBUTION["openmeteo"]
+    assert row_attrs[0] == expected.license
+    assert row_attrs[1] == expected.attribution
 
 
 async def test_lookup_uses_bucketed_lat_lon(clean_tmy_cache: None) -> None:
