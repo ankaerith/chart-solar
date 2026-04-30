@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.engine.types import ExportRegime
 from backend.providers.irradiance import HOURS_PER_TMY
@@ -156,12 +156,31 @@ class LoanInputs(BaseModel):
     """Optional financing for the system. Year-0 cashflow becomes
     ``-down_payment`` instead of ``-system_cost``; each subsequent year
     deducts the sum of that year's twelve monthly payments. ``apr=0``
-    collapses to even principal split (zero-interest dealer offers)."""
+    collapses to even principal split (zero-interest dealer offers).
+
+    For variable-rate products (HELOCs, ARM loans), pass
+    ``monthly_rates`` instead — a per-month rate vector of length
+    ``term_months``. Exactly one of ``apr`` / ``monthly_rates`` must
+    be set; the engine routes through ``amortize`` or
+    ``amortize_variable`` accordingly.
+    """
 
     principal: float = Field(..., gt=0.0)
-    apr: float = Field(..., ge=0.0, le=0.50)
+    apr: float | None = Field(None, ge=0.0, le=0.50)
+    monthly_rates: list[float] | None = Field(None, min_length=1)
     term_months: int = Field(..., ge=1, le=600)
     down_payment: float = Field(0.0, ge=0.0)
+
+    @model_validator(mode="after")
+    def _exactly_one_rate_form(self) -> LoanInputs:
+        if (self.apr is None) == (self.monthly_rates is None):
+            raise ValueError("LoanInputs requires exactly one of `apr` or `monthly_rates`")
+        if self.monthly_rates is not None and len(self.monthly_rates) != self.term_months:
+            raise ValueError(
+                f"monthly_rates length ({len(self.monthly_rates)}) "
+                f"must equal term_months ({self.term_months})"
+            )
+        return self
 
 
 class FinancialInputs(BaseModel):
