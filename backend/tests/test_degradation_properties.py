@@ -1,4 +1,4 @@
-"""Property-based tests for engine.degradation (chart-solar-8lll).
+"""Property-based tests for engine.degradation.
 
 Invariants that must hold across the input space:
 

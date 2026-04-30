@@ -1,4 +1,4 @@
-"""Property-based tests for engine finance math (chart-solar-8lll).
+"""Property-based tests for engine finance math.
 
 Where the example tests in ``test_finance_amortization.py`` /
 ``test_finance_cashflow.py`` pin specific numeric outputs, these
