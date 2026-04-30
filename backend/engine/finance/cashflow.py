@@ -3,9 +3,10 @@
 These are the bones of the headline number on the audit. The user picks
 a discount rate (HYSA, mortgage, S&P historical, the loan APR, or a
 custom value) — everything else is mechanical. Implementations are
-deterministic and SciPy-free: IRR / MIRR fall out of bisection on NPV,
-LCOE is a closed-form ratio, payback walks the cumulative discounted
-stream and interpolates the crossing month.
+deterministic and SciPy-free: IRR runs Brent's method on NPV, MIRR is
+closed-form, LCOE is a discounted-cost-over-discounted-energy ratio,
+payback walks the cumulative discounted stream and interpolates the
+crossing month.
 
 All cashflows here are *annual*, sign-conventioned as the user
 experiences them: negative for outflows (year-0 system cost, future

@@ -89,23 +89,16 @@ def _brent(
     f_a = fn(low) - target
     f_b = fn(high) - target
     if f_a * f_b > 0:
-        # Caller passed a non-bracketing initial pair. Fall back to
-        # bisection's degraded behaviour rather than raising — the
-        # public IRR / dealer-fee functions check the bracket
-        # explicitly before calling, so this branch is defensive.
+        # Defensive: public callers bracket-check before invoking.
         return _bisect(fn, low, high, target=target, tol=tol, bracket_tol=bracket_tol)
 
-    # Brent's classic naming: a is the contrapoint, b the current
-    # estimate (always carries the smaller |residual|), c the previous
-    # contrapoint. d / e track the previous step lengths so we can
-    # decide whether to accept an interpolated step.
     a, b = low, high
     if abs(f_a) < abs(f_b):
         a, b = b, a
         f_a, f_b = f_b, f_a
     c, f_c = a, f_a
     mflag = True
-    d = 0.0  # only read when mflag is False
+    d = 0.0
 
     for _ in range(max_iter):
         if abs(f_b) < tol:
@@ -115,20 +108,14 @@ def _brent(
 
         s: float
         if f_a != f_c and f_b != f_c:
-            # Inverse-quadratic interpolation through (a, f_a),
-            # (b, f_b), (c, f_c).
             s = (
                 a * f_b * f_c / ((f_a - f_b) * (f_a - f_c))
                 + b * f_a * f_c / ((f_b - f_a) * (f_b - f_c))
                 + c * f_a * f_b / ((f_c - f_a) * (f_c - f_b))
             )
         else:
-            # Secant step (linear interpolation).
             s = b - f_b * (b - a) / (f_b - f_a)
 
-        # Brent's safety conditions: reject the interpolated guess
-        # whenever it would land outside [(3a+b)/4, b] or fail to make
-        # at least 50 % progress relative to the prior step.
         cond1 = not (((3 * a + b) / 4.0) < s < b or b < s < ((3 * a + b) / 4.0))
         cond2 = mflag and abs(s - b) >= abs(b - c) / 2.0
         cond3 = (not mflag) and abs(s - b) >= abs(c - d) / 2.0
