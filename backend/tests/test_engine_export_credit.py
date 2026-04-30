@@ -89,12 +89,11 @@ def _zero_export() -> list[float]:
 
 
 def _signed_monthly(*, import_per_month: float, export_per_month: float) -> list[float]:
-    """8760-entry signed net load: each month gets ``import_per_month``
-    spread across the first chunk of weekday daytime hours (positive)
-    and ``export_per_month`` spread across the next chunk (negative).
-    Used to construct PG&E-E1-shaped fixtures where the monthly totals
-    are easy to reason about — the within-month order doesn't affect
-    NEM 1:1 tier-walking netting because we aggregate per month."""
+    """8760-entry signed net load: each month carries ``import_per_month``
+    in its first-half hours and ``-export_per_month`` in its second-half.
+    Within-month ordering doesn't affect NEM 1:1 tier-walking netting
+    (which aggregates per month) — the helper just spreads the totals
+    so a typical 8760 walker visits both sign zones."""
     from backend.providers.irradiance import tmy_hour_calendar
 
     calendar = tmy_hour_calendar()
@@ -104,7 +103,6 @@ def _signed_monthly(*, import_per_month: float, export_per_month: float) -> list
 
     net_load = [0.0] * HOURS_PER_TMY
     for hours in hours_by_month.values():
-        # First half of hours: imports; second half: exports. Spread evenly.
         half = len(hours) // 2
         if half == 0:
             continue
@@ -194,10 +192,9 @@ def test_nem_1to1_tiered_pure_net_exporter_month_credits_full_import_bill() -> N
 
 
 def test_nem_1to1_tiered_credit_is_strictly_below_top_rate_upper_bound() -> None:
-    """Regression check vs the previous conservative-upper-bound model.
-    A net-importer household with modest exports must see less credit
-    than (export_kwh × top_tier_rate) — that's the whole point of
-    chart-solar-f7n7."""
+    """A net-importer household with modest exports sees less credit
+    than ``export_kwh × top_tier_rate`` — exports offset the lowest
+    tier the cursor is sitting in, not the top."""
     # 200 kWh imports, 50 kWh exports per month: net importer, exports
     # offset only the top-tier portion of the imports-only bill (which
     # in this case is 0 because 200 < tier-1 cap of 300). So actual

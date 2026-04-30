@@ -31,6 +31,7 @@ from backend.providers.irradiance import HOURS_PER_TMY, tmy_hour_calendar
 from backend.providers.tariff import (
     CurrencyCode,
     TariffSchedule,
+    TieredBlock,
     first_matching_tou_period,
 )
 
@@ -71,52 +72,62 @@ def _bill_flat(
     return monthly_energy, monthly_kwh
 
 
+def sort_tiered_blocks(tariff: TariffSchedule) -> list[TieredBlock]:
+    """Threshold-ascending block order, with the catch-all (no
+    ``up_to_kwh_per_month``) last via the ``inf`` key.
+
+    Hoisted out of the per-month walk so callers running it inside a
+    loop (Monte Carlo × hold years × 12 months) sort once instead of
+    on every walk.
+    """
+    if not tariff.tiered_blocks:
+        raise ValueError("tiered tariff requires tiered_blocks")
+    return sorted(
+        tariff.tiered_blocks,
+        key=lambda b: b.up_to_kwh_per_month if b.up_to_kwh_per_month is not None else float("inf"),
+    )
+
+
+def walk_tier_charge(monthly_kwh: float, sorted_blocks: list[TieredBlock]) -> float:
+    """Bill ``monthly_kwh`` (clamped at 0) through pre-sorted tier blocks.
+
+    The cursor walk on the monthly total is mathematically equivalent
+    to walking hour-by-hour because no per-hour artifact is reported —
+    only the month's total energy charge is.
+    """
+    if monthly_kwh <= 0:
+        return 0.0
+    cursor = 0.0
+    remaining = monthly_kwh
+    charge = 0.0
+    for block in sorted_blocks:
+        if remaining <= 0:
+            break
+        threshold = block.up_to_kwh_per_month
+        if threshold is None:
+            charge += remaining * block.rate_per_kwh
+            return charge
+        if cursor >= threshold:
+            continue
+        portion = min(remaining, threshold - cursor)
+        charge += portion * block.rate_per_kwh
+        cursor += portion
+        remaining -= portion
+    return charge
+
+
 def _bill_tiered(
     *,
     hourly_import_kwh: list[float],
     tariff: TariffSchedule,
 ) -> tuple[list[float], list[float]]:
-    """Per-month (energy_charge, kwh_imported) for a tiered tariff.
-
-    Walks the hourly stream tracking month-to-date kWh; when a tier's
-    threshold is crossed mid-hour, splits the kWh across the two
-    tiers proportionally. The catch-all (no ``up_to_kwh_per_month``)
-    sorts last via the `inf` key.
-    """
-    blocks = tariff.tiered_blocks
-    if not blocks:
-        raise ValueError("tiered tariff requires tiered_blocks")
-
-    sorted_blocks = sorted(
-        blocks,
-        key=lambda b: b.up_to_kwh_per_month if b.up_to_kwh_per_month is not None else float("inf"),
-    )
-
-    monthly_energy = [0.0] * 12
+    """Per-month (energy_charge, kwh_imported) for a tiered tariff."""
+    sorted_blocks = sort_tiered_blocks(tariff)
     monthly_kwh = [0.0] * 12
-
     for hour_index, kwh in enumerate(hourly_import_kwh):
-        if kwh <= 0:
-            continue
-        month_idx = _TMY_CALENDAR[hour_index][0] - 1
-        monthly_kwh[month_idx] += kwh
-        cursor = monthly_kwh[month_idx] - kwh
-        remaining = kwh
-        for block in sorted_blocks:
-            if remaining <= 0:
-                break
-            threshold = block.up_to_kwh_per_month
-            if threshold is None:
-                monthly_energy[month_idx] += remaining * block.rate_per_kwh
-                remaining = 0.0
-                break
-            if cursor >= threshold:
-                continue
-            portion = min(remaining, threshold - cursor)
-            monthly_energy[month_idx] += portion * block.rate_per_kwh
-            cursor += portion
-            remaining -= portion
-
+        if kwh > 0:
+            monthly_kwh[_TMY_CALENDAR[hour_index][0] - 1] += kwh
+    monthly_energy = [walk_tier_charge(m, sorted_blocks) for m in monthly_kwh]
     return monthly_energy, monthly_kwh
 
 

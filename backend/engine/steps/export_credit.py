@@ -26,6 +26,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from backend.engine.registry import register
+from backend.engine.steps.tariff import sort_tiered_blocks, walk_tier_charge
 from backend.engine.types import ExportRegime
 from backend.providers.irradiance import HOURS_PER_TMY, tmy_hour_calendar
 from backend.providers.tariff import TariffSchedule, first_matching_tou_period
@@ -177,68 +178,25 @@ def _resolve_nem_one_rate_flat_or_tou(
     )
 
 
-def _walk_tier_charge(*, monthly_kwh: float, tariff: TariffSchedule) -> float:
-    """One month's energy charge for a tiered tariff: walk the blocks in
-    threshold order, billing each block at its own rate up to its
-    ``up_to_kwh_per_month`` threshold; the catch-all (no threshold)
-    handles whatever's above. Equivalent to ``_bill_tiered`` accumulated
-    one hour at a time, but operating on a single monthly total.
-    """
-    if monthly_kwh <= 0.0:
-        return 0.0
-    if not tariff.tiered_blocks:
-        raise ValueError("tiered tariff requires tiered_blocks")
-    sorted_blocks = sorted(
-        tariff.tiered_blocks,
-        key=lambda b: b.up_to_kwh_per_month if b.up_to_kwh_per_month is not None else float("inf"),
-    )
-    cursor = 0.0
-    remaining = monthly_kwh
-    charge = 0.0
-    for block in sorted_blocks:
-        if remaining <= 0.0:
-            break
-        threshold = block.up_to_kwh_per_month
-        if threshold is None:
-            charge += remaining * block.rate_per_kwh
-            return charge
-        if cursor >= threshold:
-            continue
-        portion = min(remaining, threshold - cursor)
-        charge += portion * block.rate_per_kwh
-        cursor += portion
-        remaining -= portion
-    return charge
-
-
 def _apply_nem_one_for_one_tiered(
     *,
     hourly_net_load_kwh: list[float],
     tariff: TariffSchedule,
 ) -> ExportCreditResult:
-    """NEM 1:1 retail-rate netting on a tiered tariff (chart-solar-f7n7).
+    """NEM 1:1 retail-rate netting on a tiered tariff.
 
-    Real-world PG&E E-1-style tiered NEM 1:1 nets export against import
-    within a billing month *before* tier walking, so a household
-    exporting 200 kWh and importing 500 kWh effectively imports 300 net
-    kWh — billed at the tariff's tier rates from cursor 0. Most of those
-    300 kWh sit in the lowest tier; the homeowner is *not* credited at
-    the top tier rate as the conservative upper bound previously
-    assumed.
-
-    Implementation: aggregate each month's imports and exports
-    separately, then bill the tier table on (a) imports-only and
-    (b) ``max(0, imports − exports)``. The credit per month is the
-    delta — i.e. the dollars the homeowner saves *because* the meter
-    nets in their favor before tier walking. Surplus exports beyond
-    same-month imports forfeit (the helper doesn't model NSC year-end
-    monetization; callers can layer that on top).
+    Aggregates each month's imports and exports, then bills the tier
+    table on imports-only and on ``max(0, imports − exports)``. The
+    credit per month is the bill delta. Surplus exports beyond
+    same-month imports forfeit (NSC year-end monetization is the
+    caller's concern).
     """
     _validate_hourly(hourly_net_load_kwh, name="hourly_net_load_kwh")
     if tariff.structure != "tiered":
         raise ValueError(
             f"_apply_nem_one_for_one_tiered expects structure='tiered' (got {tariff.structure!r})"
         )
+    sorted_blocks = sort_tiered_blocks(tariff)
 
     monthly_imports = [0.0] * 12
     monthly_exports = [0.0] * 12
@@ -255,11 +213,11 @@ def _apply_nem_one_for_one_tiered(
         imports = monthly_imports[month_idx]
         exports = monthly_exports[month_idx]
         netted = max(0.0, imports - exports)
-        bill_imports = _walk_tier_charge(monthly_kwh=imports, tariff=tariff)
-        bill_netted = _walk_tier_charge(monthly_kwh=netted, tariff=tariff)
+        bill_imports = walk_tier_charge(imports, sorted_blocks)
+        bill_netted = walk_tier_charge(netted, sorted_blocks)
         monthly_credit.append(bill_imports - bill_netted)
-        # Only the slice of exports that actually offset same-month
-        # imports counts as "credited"; surplus forfeits at month-end.
+        # Only the slice of exports that offset same-month imports
+        # counts as "credited"; surplus forfeits at month-end.
         annual_kwh_credited += min(exports, imports)
 
     return ExportCreditResult(
