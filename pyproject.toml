@@ -29,6 +29,7 @@ dev = [
     "mypy>=1.20",
     "pre-commit>=4.4",
     "pip-licenses>=5.0",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.ruff]
@@ -53,6 +54,26 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["backend/tests"]
+
+[tool.coverage.run]
+source = ["backend"]
+# Tests aren't production code; counting them inflates the headline.
+omit = ["backend/tests/*", "backend/__init__.py"]
+branch = true
+
+[tool.coverage.report]
+# Pragma escape hatches and runtime-only branches that aren't worth a fixture.
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@overload",
+]
+# Headline for the CI gate. Current measurement sits at ~92 %; lowering
+# this gate is a deliberate trade-off, not a routine cleanup.
+fail_under = 90
+show_missing = true
+skip_covered = false
 
 [tool.mypy]
 python_version = "3.12"
