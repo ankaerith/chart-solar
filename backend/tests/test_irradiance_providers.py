@@ -131,6 +131,94 @@ def test_parse_openmeteo_json_drops_feb29_in_leap_year() -> None:
     assert len(tmy.ghi_w_m2) == HOURS_PER_TMY
 
 
+def test_parse_openmeteo_json_without_daily_leaves_monthly_fields_unset() -> None:
+    """Older cached payloads without the daily block: schema still
+    validates because the monthly fields are optional, and the engine
+    soiling/snow steps no-op when they're None."""
+    payload = _synthetic_openmeteo_payload(hours=HOURS_PER_TMY, elevation=0.0)
+    tmy = parse_openmeteo_json(payload, source_lat=0.0, source_lon=0.0)
+    assert tmy.precipitation_mm_per_month is None
+    assert tmy.snowfall_cm_per_month is None
+    assert tmy.relative_humidity_pct_per_month is None
+
+
+def test_parse_openmeteo_json_aggregates_daily_precipitation_into_months() -> None:
+    """1 mm/day for 365 days aggregates correctly: Jan/Mar/May/.../Dec
+    get their day counts × 1 mm; Feb gets 28 mm in a non-leap year."""
+    payload = _synthetic_openmeteo_payload(hours=HOURS_PER_TMY, elevation=0.0, include_daily=True)
+    tmy = parse_openmeteo_json(payload, source_lat=0.0, source_lon=0.0)
+    assert tmy.precipitation_mm_per_month is not None
+    assert len(tmy.precipitation_mm_per_month) == 12
+    assert tmy.precipitation_mm_per_month[0] == pytest.approx(31.0)  # Jan
+    assert tmy.precipitation_mm_per_month[1] == pytest.approx(28.0)  # Feb
+    assert tmy.precipitation_mm_per_month[3] == pytest.approx(30.0)  # Apr
+
+
+def test_parse_openmeteo_json_aggregates_snowfall_into_winter_only() -> None:
+    """The fixture sets 0.5 cm/day in Jan/Feb/Dec; the rest of the year
+    gets zero snowfall. Aggregation preserves that pattern."""
+    payload = _synthetic_openmeteo_payload(hours=HOURS_PER_TMY, elevation=0.0, include_daily=True)
+    tmy = parse_openmeteo_json(payload, source_lat=0.0, source_lon=0.0)
+    assert tmy.snowfall_cm_per_month is not None
+    assert tmy.snowfall_cm_per_month[0] == pytest.approx(15.5)  # 31 × 0.5
+    assert tmy.snowfall_cm_per_month[1] == pytest.approx(14.0)  # 28 × 0.5
+    assert tmy.snowfall_cm_per_month[5] == pytest.approx(0.0)  # Jun
+    assert tmy.snowfall_cm_per_month[11] == pytest.approx(15.5)  # 31 × 0.5
+
+
+def test_parse_openmeteo_json_aggregates_hourly_humidity_to_monthly_mean() -> None:
+    """Constant 60% RH across the year → 60.0 in every monthly slot
+    (means handle uneven days-per-month correctly)."""
+    payload = _synthetic_openmeteo_payload(hours=HOURS_PER_TMY, elevation=0.0, include_rh=True)
+    tmy = parse_openmeteo_json(payload, source_lat=0.0, source_lon=0.0)
+    assert tmy.relative_humidity_pct_per_month is not None
+    for month_rh in tmy.relative_humidity_pct_per_month:
+        assert month_rh == pytest.approx(60.0)
+
+
+def test_tmy_schema_accepts_optional_monthly_fields() -> None:
+    """Smoke: the new optional fields validate when set with 12-length arrays."""
+    from datetime import UTC, datetime
+
+    tmy = TmyData(
+        lat=0.0,
+        lon=0.0,
+        elevation_m=0.0,
+        timezone="UTC",
+        source="openmeteo",
+        fetched_at=datetime.now(UTC),
+        ghi_w_m2=[0.0] * HOURS_PER_TMY,
+        dni_w_m2=[0.0] * HOURS_PER_TMY,
+        dhi_w_m2=[0.0] * HOURS_PER_TMY,
+        temp_air_c=[0.0] * HOURS_PER_TMY,
+        wind_speed_m_s=[0.0] * HOURS_PER_TMY,
+        precipitation_mm_per_month=[10.0] * 12,
+        snowfall_cm_per_month=[0.0] * 12,
+        relative_humidity_pct_per_month=[55.0] * 12,
+    )
+    assert tmy.precipitation_mm_per_month == [10.0] * 12
+
+
+def test_tmy_schema_rejects_monthly_fields_with_wrong_length() -> None:
+    from datetime import UTC, datetime
+
+    with pytest.raises(ValueError):
+        TmyData(
+            lat=0.0,
+            lon=0.0,
+            elevation_m=0.0,
+            timezone="UTC",
+            source="openmeteo",
+            fetched_at=datetime.now(UTC),
+            ghi_w_m2=[0.0] * HOURS_PER_TMY,
+            dni_w_m2=[0.0] * HOURS_PER_TMY,
+            dhi_w_m2=[0.0] * HOURS_PER_TMY,
+            temp_air_c=[0.0] * HOURS_PER_TMY,
+            wind_speed_m_s=[0.0] * HOURS_PER_TMY,
+            precipitation_mm_per_month=[10.0] * 11,  # wrong length
+        )
+
+
 def test_openmeteo_provider_uses_free_endpoint_by_default() -> None:
     p = OpenMeteoProvider()
     assert p.endpoint == OPENMETEO_FREE_URL
@@ -237,8 +325,14 @@ def _synthetic_pvgis_payload(*, hours: int, elevation: float) -> dict[str, Any]:
     }
 
 
-def _synthetic_openmeteo_payload(*, hours: int, elevation: float) -> dict[str, Any]:
-    return {
+def _synthetic_openmeteo_payload(
+    *,
+    hours: int,
+    elevation: float,
+    include_daily: bool = False,
+    include_rh: bool = False,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "elevation": elevation,
         "timezone": "GMT",
         "hourly": {
@@ -249,6 +343,24 @@ def _synthetic_openmeteo_payload(*, hours: int, elevation: float) -> dict[str, A
             "wind_speed_10m": [3.0 for _ in range(hours)],
         },
     }
+    if include_rh:
+        payload["hourly"]["relative_humidity_2m"] = [60.0 for _ in range(hours)]
+    if include_daily:
+        # Build a 365-day series anchored to a non-leap year so each
+        # month gets the right day count.
+        from datetime import date, timedelta
+
+        start = date(2023, 1, 1)
+        days = 366 if hours == 8784 else 365
+        dates = [(start + timedelta(days=i)).isoformat() for i in range(days)]
+        payload["daily"] = {
+            "time": dates,
+            # 1 mm/day → ~30 mm/month
+            "precipitation_sum": [1.0 for _ in range(days)],
+            # 0.5 cm/day in winter (~Q1, Q4), 0 elsewhere
+            "snowfall_sum": [0.5 if int(d[5:7]) in (1, 2, 12) else 0.0 for d in dates],
+        }
+    return payload
 
 
 def _iter_hours(total: int) -> list[tuple[int, int, int]]:
