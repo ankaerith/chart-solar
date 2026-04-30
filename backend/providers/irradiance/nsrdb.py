@@ -8,6 +8,13 @@ then 8760 hourly rows (UTC offset baked in via the `Local Time Zone`
 metadata). We expose the parsed shape via `TmyData`; the network layer
 goes through `backend.infra.http.make_get` so retries + the per-service
 breaker stay consistent with every other upstream.
+
+Monthly aggregates: PSM3 carries hourly Relative Humidity, which we
+average into ``relative_humidity_pct_per_month`` so the soiling step
+can run on US sites without a sibling provider call. PSM3 does *not*
+carry surface precipitation or snowfall — those live in the NSRDB-1985
+monthly aggregate dataset (separate API). Until that adapter lands the
+precip/snow fields stay ``None`` and the relevant engine steps no-op.
 """
 
 from __future__ import annotations
@@ -74,21 +81,29 @@ def parse_nsrdb_csv(body: str, *, source_lat: float, source_lon: float) -> TmyDa
     missing = required - col.keys()
     if missing:
         raise ValueError(f"NSRDB CSV missing columns: {sorted(missing)}")
+    rh_idx = col.get("Relative Humidity")
 
     ghi: list[float] = []
     dni: list[float] = []
     dhi: list[float] = []
     temp: list[float] = []
     wind: list[float] = []
+    rh: list[float] = []
     for row in reader:
         ghi.append(float(row[col["GHI"]]))
         dni.append(float(row[col["DNI"]]))
         dhi.append(float(row[col["DHI"]]))
         temp.append(float(row[col["Temperature"]]))
         wind.append(float(row[col["Wind Speed"]]))
+        if rh_idx is not None:
+            rh.append(float(row[rh_idx]))
 
     if len(ghi) != HOURS_PER_TMY:
         raise ValueError(f"NSRDB CSV had {len(ghi)} rows; TMY must be {HOURS_PER_TMY}")
+
+    monthly_rh: list[float] | None = None
+    if rh_idx is not None and len(rh) == HOURS_PER_TMY:
+        monthly_rh = _aggregate_hourly_to_monthly_mean(rh)
 
     return TmyData(
         lat=source_lat,
@@ -102,7 +117,41 @@ def parse_nsrdb_csv(body: str, *, source_lat: float, source_lon: float) -> TmyDa
         dhi_w_m2=dhi,
         temp_air_c=temp,
         wind_speed_m_s=wind,
+        relative_humidity_pct_per_month=monthly_rh,
     )
+
+
+_HOURS_PER_MONTH_NON_LEAP: tuple[int, ...] = (
+    31 * 24,
+    28 * 24,
+    31 * 24,
+    30 * 24,
+    31 * 24,
+    30 * 24,
+    31 * 24,
+    31 * 24,
+    30 * 24,
+    31 * 24,
+    30 * 24,
+    31 * 24,
+)
+
+
+def _aggregate_hourly_to_monthly_mean(values: list[float]) -> list[float]:
+    """Average an 8760-hour series into 12 monthly means.
+
+    Days-per-month is non-uniform; sum/count division below handles
+    that correctly. Mirrors the helper in ``openmeteo.py`` — kept local
+    here to avoid a cross-adapter import that would invert the
+    dependency direction.
+    """
+    out: list[float] = []
+    cursor = 0
+    for hours in _HOURS_PER_MONTH_NON_LEAP:
+        chunk = values[cursor : cursor + hours]
+        out.append(sum(chunk) / len(chunk))
+        cursor += hours
+    return out
 
 
 def _offset_to_iana_etc(offset_hours: float) -> str:

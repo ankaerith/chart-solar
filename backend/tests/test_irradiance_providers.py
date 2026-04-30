@@ -84,6 +84,42 @@ def test_parse_nsrdb_csv_rejects_truncated() -> None:
         parse_nsrdb_csv(csv_text, source_lat=0.0, source_lon=0.0)
 
 
+def test_parse_nsrdb_csv_without_rh_column_leaves_monthly_rh_unset() -> None:
+    """Older cached payloads without `Relative Humidity` keep
+    monthly RH ``None`` — the schema is permissive there."""
+    csv_text = _synthetic_nsrdb_csv(hours=HOURS_PER_TMY, elevation=1655.0)
+    tmy = parse_nsrdb_csv(csv_text, source_lat=40.0, source_lon=-105.0)
+    assert tmy.relative_humidity_pct_per_month is None
+
+
+def test_parse_nsrdb_csv_aggregates_hourly_rh_into_monthly_mean() -> None:
+    """Constant 60% RH across the year → 60.0 in every monthly slot."""
+    csv_text = _synthetic_nsrdb_csv(
+        hours=HOURS_PER_TMY,
+        elevation=1655.0,
+        include_rh=True,
+        rh_value=60.0,
+    )
+    tmy = parse_nsrdb_csv(csv_text, source_lat=40.0, source_lon=-105.0)
+    assert tmy.relative_humidity_pct_per_month is not None
+    assert len(tmy.relative_humidity_pct_per_month) == 12
+    for month_rh in tmy.relative_humidity_pct_per_month:
+        assert month_rh == pytest.approx(60.0)
+
+
+def test_parse_nsrdb_csv_leaves_precip_and_snow_unset_for_psm3() -> None:
+    """PSM3 doesn't carry surface precipitation or snowfall — those
+    fields stay ``None`` until the NSRDB-1985 monthly adapter lands."""
+    csv_text = _synthetic_nsrdb_csv(
+        hours=HOURS_PER_TMY,
+        elevation=1655.0,
+        include_rh=True,
+    )
+    tmy = parse_nsrdb_csv(csv_text, source_lat=40.0, source_lon=-105.0)
+    assert tmy.precipitation_mm_per_month is None
+    assert tmy.snowfall_cm_per_month is None
+
+
 def test_parse_nsrdb_csv_rejects_missing_columns() -> None:
     bad = "Elevation,Local Time Zone\n0,-7\nMonth,Day,Hour\n1,1,0\n"
     with pytest.raises(ValueError, match="missing columns"):
@@ -281,7 +317,13 @@ def _settings(nsrdb: bool = False, openmeteo_paid: bool = False) -> Settings:
     return s
 
 
-def _synthetic_nsrdb_csv(*, hours: int, elevation: float) -> str:
+def _synthetic_nsrdb_csv(
+    *,
+    hours: int,
+    elevation: float,
+    include_rh: bool = False,
+    rh_value: float = 55.0,
+) -> str:
     """PSM3 CSV: 2 metadata header rows + data header + `hours` data rows."""
     buf = io.StringIO()
     writer_meta = io.StringIO()
@@ -294,13 +336,20 @@ def _synthetic_nsrdb_csv(*, hours: int, elevation: float) -> str:
         f"NSRDB,000000,X,X,X,40.0,-105.0,-7,{elevation},-7,c,w/m2,w/m2,w/m2,c,mbar,Degrees,m/s\n"
     )
     buf.write(writer_meta.getvalue())
-    buf.write("Year,Month,Day,Hour,Minute,GHI,DNI,DHI,Temperature,Wind Speed\n")
+    base_cols = "Year,Month,Day,Hour,Minute,GHI,DNI,DHI,Temperature,Wind Speed"
+    if include_rh:
+        buf.write(base_cols + ",Relative Humidity\n")
+    else:
+        buf.write(base_cols + "\n")
     for i in range(hours):
         # Trivial diurnal sine: peak GHI 900 W/m², no negatives.
         ghi = max(0.0, 900.0 * (i % 24 - 12) / 12.0)
         dni = ghi * 0.85
         dhi = ghi * 0.15
-        buf.write(f"2020,1,1,{i % 24},0,{ghi:.1f},{dni:.1f},{dhi:.1f},20.0,3.0\n")
+        if include_rh:
+            buf.write(f"2020,1,1,{i % 24},0,{ghi:.1f},{dni:.1f},{dhi:.1f},20.0,3.0,{rh_value}\n")
+        else:
+            buf.write(f"2020,1,1,{i % 24},0,{ghi:.1f},{dni:.1f},{dhi:.1f},20.0,3.0\n")
     return buf.getvalue()
 
 
