@@ -45,6 +45,7 @@ from backend.engine.inputs import (
     FinancialInputs,
     LoanInputs,
 )
+from backend.engine.integration.nbt import compute_nbt_net_bill
 from backend.engine.registry import register
 from backend.engine.steps.dc_production import DcProductionResult
 from backend.engine.steps.degradation import DegradationCurve
@@ -101,45 +102,47 @@ def _hourly_export(net_load: list[float]) -> list[float]:
     return [max(0.0, -nl) for nl in net_load]
 
 
-def _bill_avoidance_year(
+def _finance_year_terms(
     *,
     baseline_total: float,
     consumption: list[float],
     hourly_ac_kw: list[float],
     degradation_factor: float,
     schedule: TariffSchedule,
-) -> tuple[float, list[float]]:
-    """One year's bill avoidance + the year's hourly export stream.
+    export_config: ExportCreditInputs | None,
+) -> tuple[float, float]:
+    """One year's (bill_avoidance, export_credit_dollars).
 
-    Returning the export stream alongside the avoidance saves a second
-    pass through the consumption × production zip when the export-credit
-    step needs the same data.
+    For NBT, run the raw credit through ``compute_nbt_net_bill`` so
+    the within-month cap + year-end forfeit apply; other regimes pass
+    through. Bill avoidance is always the pre-credit import delta —
+    keeping cashflow composition uniform across regimes.
     """
     net_load = _net_load_for_year(
         consumption=consumption,
         hourly_ac_kw=hourly_ac_kw,
         degradation_factor=degradation_factor,
     )
-    bill = compute_annual_bill(hourly_net_load_kwh=net_load, tariff=schedule)
-    avoidance = baseline_total - bill.annual_total
-    return avoidance, _hourly_export(net_load)
+    with_solar_bill = compute_annual_bill(hourly_net_load_kwh=net_load, tariff=schedule)
+    bill_avoidance = baseline_total - with_solar_bill.annual_total
 
+    if export_config is None:
+        return bill_avoidance, 0.0
 
-def _export_credit_year(
-    *,
-    export_config: ExportCreditInputs,
-    schedule: TariffSchedule | None,
-    hourly_export_kwh: list[float],
-) -> float:
-    result = apply_export_credit(
+    credit = apply_export_credit(
         regime=export_config.regime,
-        hourly_export_kwh=hourly_export_kwh,
+        hourly_export_kwh=_hourly_export(net_load),
         tariff=schedule,
         hourly_avoided_cost_per_kwh=export_config.hourly_avoided_cost_per_kwh,
         rate_per_kwh=export_config.flat_rate_per_kwh,
         hourly_rate_per_kwh=export_config.hourly_rate_per_kwh,
     )
-    return result.annual_credit
+
+    if export_config.regime == "nem_three_nbt":
+        netted = compute_nbt_net_bill(annual_bill=with_solar_bill, export_credit=credit)
+        return bill_avoidance, netted.annual_credit_applied
+
+    return bill_avoidance, credit.annual_credit
 
 
 def _annual_loan_payments(loan: LoanInputs, hold_years: int) -> tuple[list[float], list[float]]:
@@ -232,24 +235,16 @@ def run_finance(
 
     for year in range(financial.hold_years):
         factor = degradation.factors[year]
-        avoidance, hourly_export = _bill_avoidance_year(
+        avoidance, year_export_credit = _finance_year_terms(
             baseline_total=baseline.annual_total,
             consumption=consumption,
             hourly_ac_kw=dc.hourly_ac_kw,
             degradation_factor=factor,
             schedule=schedule,
+            export_config=export_credit,
         )
         bill_avoidance.append(avoidance)
-        if export_credit is not None:
-            export_credits.append(
-                _export_credit_year(
-                    export_config=export_credit,
-                    schedule=schedule,
-                    hourly_export_kwh=hourly_export,
-                )
-            )
-        else:
-            export_credits.append(0.0)
+        export_credits.append(year_export_credit)
         energy_per_year.append(dc.annual_ac_kwh * factor)
 
     monthly_loan_payments: list[float] = []
