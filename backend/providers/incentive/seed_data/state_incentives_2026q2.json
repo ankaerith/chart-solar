@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-04-29",
+  "snapshot_label": "2026-Q2",
+  "source": "Hand-curated from state energy office + utility websites; cross-checked against DSIRE-USA where the program is documented there.",
+  "refresh_cadence_days": 90,
+  "stale_warning_days": 90,
+  "notes": [
+    "Programs are date-parameterized — every entry has start_date / end_date.",
+    "When a program announces a step-down (e.g. NY-Sun blocks), record the next-block rate as a future-dated separate entry.",
+    "DSIRE integration is deferred to Phase 3a pending counsel review on CC-BY-SA; this is the launch-day baseline."
+  ],
+  "incentives": [
+    {
+      "name": "Federal Investment Tax Credit",
+      "type": "federal_itc",
+      "jurisdiction": "US",
+      "amount": 0.30,
+      "amount_kind": "pct_system_cost",
+      "start_date": "2023-01-01",
+      "end_date": "2032-12-31",
+      "cap_amount": null
+    },
+    {
+      "name": "NY State Solar Tax Credit",
+      "type": "state_credit",
+      "jurisdiction": "US-NY",
+      "amount": 0.25,
+      "amount_kind": "pct_system_cost",
+      "start_date": "2006-09-01",
+      "end_date": null,
+      "cap_amount": 5000.0
+    },
+    {
+      "name": "NY-Sun Megawatt Block (residential PV standard)",
+      "type": "utility_rebate",
+      "jurisdiction": "US-NY",
+      "amount": 0.20,
+      "amount_kind": "per_w_dc",
+      "start_date": "2014-04-01",
+      "end_date": null,
+      "cap_amount": null
+    },
+    {
+      "name": "Massachusetts Personal Income Tax Credit (Schedule EC)",
+      "type": "state_credit",
+      "jurisdiction": "US-MA",
+      "amount": 0.15,
+      "amount_kind": "pct_system_cost",
+      "start_date": "1979-01-01",
+      "end_date": null,
+      "cap_amount": 1000.0
+    },
+    {
+      "name": "MA SMART Program (residential base compensation)",
+      "type": "feed_in",
+      "jurisdiction": "US-MA",
+      "amount": 0.18,
+      "amount_kind": "per_kwh",
+      "start_date": "2018-11-26",
+      "end_date": null,
+      "cap_amount": null
+    },
+    {
+      "name": "Xcel Solar*Rewards (CO)",
+      "type": "utility_rebate",
+      "jurisdiction": "US-CO",
+      "amount": 0.10,
+      "amount_kind": "per_w_dc",
+      "start_date": "2010-01-01",
+      "end_date": null,
+      "cap_amount": null
+    },
+    {
+      "name": "Energy Trust of Oregon Solar+Storage Cash Incentive",
+      "type": "utility_rebate",
+      "jurisdiction": "US-OR",
+      "amount": 0.30,
+      "amount_kind": "per_w_dc",
+      "start_date": "2002-03-01",
+      "end_date": null,
+      "cap_amount": 5000.0
+    },
+    {
+      "name": "Oregon Solar + Storage Rebate (state)",
+      "type": "state_credit",
+      "jurisdiction": "US-OR",
+      "amount": 0.50,
+      "amount_kind": "per_w_dc",
+      "start_date": "2020-01-01",
+      "end_date": null,
+      "cap_amount": 5000.0
+    },
+    {
+      "name": "NJ Successor Solar Incentive (SuSI / TREC)",
+      "type": "srec",
+      "jurisdiction": "US-NJ",
+      "amount": 0.085,
+      "amount_kind": "per_kwh",
+      "start_date": "2021-08-28",
+      "end_date": null,
+      "cap_amount": null
+    },
+    {
+      "name": "Maryland Residential Clean Energy Grant",
+      "type": "state_credit",
+      "jurisdiction": "US-MD",
+      "amount": 1000.0,
+      "amount_kind": "fixed_amount",
+      "start_date": "2007-01-01",
+      "end_date": null,
+      "cap_amount": null
+    },
+    {
+      "name": "Maryland SREC Market",
+      "type": "srec",
+      "jurisdiction": "US-MD",
+      "amount": 0.060,
+      "amount_kind": "per_kwh",
+      "start_date": "2008-01-01",
+      "end_date": null,
+      "cap_amount": null
+    },
+    {
+      "name": "Pennsylvania SREC Market",
+      "type": "srec",
+      "jurisdiction": "US-PA",
+      "amount": 0.050,
+      "amount_kind": "per_kwh",
+      "start_date": "2008-01-01",
+      "end_date": null,
+      "cap_amount": null
+    },
+    {
+      "name": "DC Solar Renewable Energy Credit Market",
+      "type": "srec",
+      "jurisdiction": "US-DC",
+      "amount": 0.300,
+      "amount_kind": "per_kwh",
+      "start_date": "2011-08-12",
+      "end_date": null,
+      "cap_amount": null
+    },
+    {
+      "name": "Ohio SREC Market",
+      "type": "srec",
+      "jurisdiction": "US-OH",
+      "amount": 0.015,
+      "amount_kind": "per_kwh",
+      "start_date": "2009-07-01",
+      "end_date": null,
+      "cap_amount": null
+    }
+  ]
+}

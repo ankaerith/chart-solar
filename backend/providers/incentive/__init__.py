@@ -60,10 +60,32 @@ class IncentiveProvider(Protocol):
     async def fetch(self, query: IncentiveQuery) -> list[Incentive]: ...
 
 
+def incentive_applies(incentive: Incentive, query: IncentiveQuery) -> bool:
+    """Whether an incentive matches a query's jurisdiction + install date.
+
+    The matching policy is contract-level: ``query.jurisdiction.startswith(
+    incentive.jurisdiction)`` so a state-scoped lookup ("US-NY") inherits
+    federal entries scoped to "US" while still excluding sibling states.
+    Date windows are inclusive on both ends; an absent ``start_date`` /
+    ``end_date`` means the program has no lower / upper bound.
+
+    Lives on the Protocol module so every provider — fakes, the manual
+    seed, the future DSIRE adapter — applies the same rule.
+    """
+    if not query.jurisdiction.startswith(incentive.jurisdiction):
+        return False
+    if incentive.start_date and query.install_date < incentive.start_date:
+        return False
+    if incentive.end_date and query.install_date > incentive.end_date:
+        return False
+    return True
+
+
 __all__ = [
     "Incentive",
     "IncentiveAmountKind",
     "IncentiveProvider",
     "IncentiveQuery",
     "IncentiveType",
+    "incentive_applies",
 ]
