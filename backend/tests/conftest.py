@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Iterator
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -13,6 +14,16 @@ from backend.engine.inputs import (
     ForecastInputs,
     SystemInputs,
     TariffInputs,
+)
+
+#: Materialized views the audit migration adds. ``Base.metadata`` doesn't
+#: track these (matviews aren't ORM tables), so ``drop_all`` would fail
+#: with ``DependentObjectsStillExistError`` whenever a prior alembic run
+#: left them behind. We drop them first so cleanup is idempotent across
+#: pytest ↔ alembic sequences.
+_MATERIALIZED_VIEWS: tuple[str, ...] = (
+    "region_pricing_aggregates",
+    "installer_internal_stats",
 )
 
 
@@ -48,6 +59,8 @@ def _async_db_uses_null_pool() -> Iterator[None]:
 
     async def _drop_schema() -> None:
         async with test_engine.begin() as conn:
+            for matview in _MATERIALIZED_VIEWS:
+                await conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {matview} CASCADE"))
             await conn.run_sync(Base.metadata.drop_all)
         await test_engine.dispose()
 
