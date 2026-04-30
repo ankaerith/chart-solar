@@ -24,33 +24,17 @@ chooses which path to wire based on the user's jurisdiction.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-
 from pydantic import BaseModel, Field
 
 from backend.engine.registry import register
+from backend.providers.irradiance import HOURS_PER_TMY, tmy_hour_calendar
 from backend.providers.tariff import (
     CurrencyCode,
     TariffSchedule,
-    TouPeriod,
+    first_matching_tou_period,
 )
 
-HOURS_PER_TMY = 8760
-
-
-def _build_tmy_calendar() -> tuple[tuple[int, bool, int], ...]:
-    """Precomputed (month, is_weekday, hour_of_day) for each of the 8760
-    hours of a 2023 non-leap year, anchored to UTC. Same anchor as
-    TmyData. Built once at import — saves one datetime allocation per
-    hour per billing call (8760× × multiple passes per Monte Carlo)."""
-    base = datetime(2023, 1, 1, 0, tzinfo=UTC)
-    return tuple(
-        (when.month, when.weekday() < 5, when.hour)
-        for when in (base + timedelta(hours=i) for i in range(HOURS_PER_TMY))
-    )
-
-
-_TMY_CALENDAR: tuple[tuple[int, bool, int], ...] = _build_tmy_calendar()
+_TMY_CALENDAR = tmy_hour_calendar()
 
 
 class MonthlyBill(BaseModel):
@@ -72,27 +56,6 @@ class AnnualBill(BaseModel):
     annual_energy_charge: float = Field(..., ge=0.0)
     annual_fixed_charge: float = Field(..., ge=0.0)
     annual_total: float = Field(..., ge=0.0)
-
-
-def _matching_tou_period(
-    *,
-    periods: list[TouPeriod],
-    month: int,
-    is_weekday: bool,
-    hour_of_day: int,
-) -> TouPeriod | None:
-    """First period whose month list + weekday flag + hour mask all
-    cover the given hour. ``None`` when no period matches — caller
-    decides how to handle (we raise; an unmatched hour is a tariff
-    authoring bug)."""
-    for period in periods:
-        if month not in period.months:
-            continue
-        if period.is_weekday is not is_weekday:
-            continue
-        if period.hour_mask[hour_of_day]:
-            return period
-    return None
 
 
 def _bill_flat(
@@ -173,8 +136,8 @@ def _bill_tou(
         if kwh <= 0:
             continue
         month, is_weekday, hour_of_day = _TMY_CALENDAR[hour_index]
-        period = _matching_tou_period(
-            periods=periods,
+        period = first_matching_tou_period(
+            periods,
             month=month,
             is_weekday=is_weekday,
             hour_of_day=hour_of_day,

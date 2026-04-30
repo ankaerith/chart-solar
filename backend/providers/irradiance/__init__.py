@@ -14,9 +14,10 @@ The router never returns `None`: Open-Meteo is the global fallback.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol, runtime_checkable
 
+import pandas as pd
 from pydantic import BaseModel, Field, model_validator
 
 from backend.config import Settings
@@ -25,6 +26,46 @@ from backend.config import settings as _global_settings
 IrradianceSource = Literal["nsrdb", "pvgis", "openmeteo"]
 
 HOURS_PER_TMY = 8760
+
+#: TMY anchor year. Non-leap (so the calendar is exactly 8760 hours)
+#: and stable across calls — TmyData arrays are indexed against this
+#: anchor in UTC, then localized at consumption time.
+TMY_ANCHOR_YEAR = 2023
+
+
+def _build_tmy_hour_calendar() -> tuple[tuple[int, bool, int], ...]:
+    base = datetime(TMY_ANCHOR_YEAR, 1, 1, 0, tzinfo=UTC)
+    return tuple(
+        (when.month, when.weekday() < 5, when.hour)
+        for when in (base + timedelta(hours=i) for i in range(HOURS_PER_TMY))
+    )
+
+
+_TMY_HOUR_CALENDAR: tuple[tuple[int, bool, int], ...] = _build_tmy_hour_calendar()
+
+
+def tmy_hour_calendar() -> tuple[tuple[int, bool, int], ...]:
+    """``(month, is_weekday, hour_of_day)`` for each of the 8760 TMY hours.
+
+    Built once at module import; the same tuple is shared across every
+    caller so the per-hour billing walks in tariff + export_credit reuse
+    one allocation across an entire Monte Carlo run.
+    """
+    return _TMY_HOUR_CALENDAR
+
+
+def tmy_datetime_index(timezone: str) -> pd.DatetimeIndex:
+    """8760-hour DatetimeIndex localised to ``timezone``.
+
+    Anchored at ``TMY_ANCHOR_YEAR-01-01 00:00 UTC`` and converted to the
+    requested IANA zone — pvlib's ModelChain insists on a tz-aware
+    index, and the synthetic-TMY clear-sky calls need the same shape.
+    Built per call because the pandas index carries a timezone in its
+    state; callers in tight loops should hoist the result.
+    """
+    base = datetime(TMY_ANCHOR_YEAR, 1, 1, 0, tzinfo=UTC)
+    naive_hours = [base + timedelta(hours=i) for i in range(HOURS_PER_TMY)]
+    return pd.DatetimeIndex(naive_hours).tz_convert(timezone)
 
 
 class TmyData(BaseModel):
@@ -127,6 +168,9 @@ __all__ = [
     "HOURS_PER_TMY",
     "IrradianceProvider",
     "IrradianceSource",
+    "TMY_ANCHOR_YEAR",
     "TmyData",
     "pick_provider",
+    "tmy_datetime_index",
+    "tmy_hour_calendar",
 ]

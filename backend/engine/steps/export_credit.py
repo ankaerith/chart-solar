@@ -23,26 +23,14 @@ module just consumes them.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-
 from pydantic import BaseModel, Field
 
 from backend.engine.registry import register
 from backend.engine.types import ExportRegime
-from backend.providers.tariff import TariffSchedule, TouPeriod
+from backend.providers.irradiance import HOURS_PER_TMY, tmy_hour_calendar
+from backend.providers.tariff import TariffSchedule, first_matching_tou_period
 
-HOURS_PER_TMY = 8760
-
-
-def _build_tmy_calendar() -> tuple[tuple[int, bool, int], ...]:
-    base = datetime(2023, 1, 1, 0, tzinfo=UTC)
-    return tuple(
-        (when.month, when.weekday() < 5, when.hour)
-        for when in (base + timedelta(hours=i) for i in range(HOURS_PER_TMY))
-    )
-
-
-_TMY_CALENDAR: tuple[tuple[int, bool, int], ...] = _build_tmy_calendar()
+_TMY_CALENDAR = tmy_hour_calendar()
 
 
 class ExportCreditResult(BaseModel):
@@ -63,23 +51,6 @@ class ExportCreditResult(BaseModel):
 def _validate_hourly(hourly: list[float], *, name: str) -> None:
     if len(hourly) != HOURS_PER_TMY:
         raise ValueError(f"{name} must be {HOURS_PER_TMY} entries (got {len(hourly)})")
-
-
-def _matching_tou_rate(
-    *,
-    periods: list[TouPeriod],
-    month: int,
-    is_weekday: bool,
-    hour_of_day: int,
-) -> float | None:
-    for period in periods:
-        if month not in period.months:
-            continue
-        if period.is_weekday is not is_weekday:
-            continue
-        if period.hour_mask[hour_of_day]:
-            return period.rate_per_kwh
-    return None
 
 
 def _accumulate_monthly_credits(
@@ -182,8 +153,8 @@ def _resolve_nem_one_rate(
     if tariff.structure == "tou":
         if not tariff.tou_periods:
             raise ValueError("tou tariff requires tou_periods")
-        matched = _matching_tou_rate(
-            periods=tariff.tou_periods,
+        matched = first_matching_tou_period(
+            tariff.tou_periods,
             month=month,
             is_weekday=is_weekday,
             hour_of_day=hour_of_day,
@@ -194,7 +165,7 @@ def _resolve_nem_one_rate(
                 f"(month={month}, weekday={is_weekday}, hour={hour_of_day}) "
                 "but no period matched — check tariff coverage"
             )
-        return matched
+        return matched.rate_per_kwh
     if tariff.structure == "tiered":
         if not tariff.tiered_blocks:
             raise ValueError("tiered tariff requires tiered_blocks")
