@@ -27,6 +27,7 @@ from typing import Any
 
 from backend.engine.inputs import ConsumptionInputs, ForecastInputs
 from backend.engine.registry import StepFn, steps_for
+from backend.engine.snapshot import build_snapshot
 from backend.engine.steps.dc_production import DcProductionResult
 from backend.providers.irradiance import HOURS_PER_TMY, TmyData
 
@@ -86,6 +87,17 @@ def run_forecast(
     state = ForecastState(inputs=inputs)
     state.artifacts["engine.irradiance"] = tmy
     state.artifacts["engine.consumption"] = _resolve_consumption(inputs.consumption)
+    # Snapshot before steps run: every saved forecast carries an
+    # engine_version + pvlib_version + canonical hash of its inputs +
+    # tariff so the methodology export can prove what produced this
+    # result, and a re-open can detect "tariff changed since you saved
+    # this" without re-running the pipeline.
+    state.artifacts["engine.snapshot"] = build_snapshot(
+        inputs=inputs,
+        tariff=inputs.tariff.schedule,
+        irradiance_source=tmy.source,
+        irradiance_fetched_at=tmy.fetched_at,
+    )
 
     requested = set(ENGINE_STEP_ORDER) if feature_keys is None else feature_keys
     registered = {step.feature_key: step.fn for step in steps_for(requested)}
