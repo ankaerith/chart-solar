@@ -54,6 +54,14 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["backend/tests"]
+# `slow` tests assert wall-clock budgets that don't survive coverage
+# instrumentation (~2× slowdown). They're real perf claims about Fly
+# small-machine runtime — not coverage-mode runtime — so the default
+# pytest run skips them. Opt in for the perf gate via `pytest -m slow`.
+addopts = "-m 'not slow'"
+markers = [
+    "slow: long-running tests (e.g. 500-path Monte Carlo budgets); opt in via `pytest -m slow`",
+]
 
 [tool.coverage.run]
 source = ["backend"]
