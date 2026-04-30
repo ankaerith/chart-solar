@@ -22,6 +22,7 @@ EXPECTED_KEYS: set[str] = {
     "engine.degradation",
     "engine.tariff",
     "engine.export_credit",
+    "engine.finance",
 }
 
 # Per ADR 0006 (and its supersession of chart-solar-5qe / chart-solar-p9l),

@@ -5,7 +5,8 @@ The pipeline orchestrator (``backend.engine.pipeline``) walks the
 registered steps in canonical order and reads only the fields each step
 needs — fields here are intentionally optional so the chain runs in
 degenerate forms (no consumption ⇒ all production exports; no tariff
-schedule ⇒ tariff + export-credit steps are skipped).
+schedule ⇒ tariff + export-credit steps are skipped; no system cost ⇒
+the finance step is skipped).
 """
 
 from pydantic import BaseModel, Field
@@ -20,6 +21,7 @@ __all__ = [
     "ExportRegime",
     "FinancialInputs",
     "ForecastInputs",
+    "LoanInputs",
     "SystemInputs",
     "TariffInputs",
 ]
@@ -33,9 +35,30 @@ class SystemInputs(BaseModel):
     azimuth_deg: float = Field(..., ge=0, le=360)
 
 
+class LoanInputs(BaseModel):
+    """Optional financing for the system. Year-0 cashflow becomes
+    ``-down_payment`` instead of ``-system_cost``; each subsequent year
+    deducts the sum of that year's twelve monthly payments. ``apr=0``
+    collapses to even principal split (zero-interest dealer offers)."""
+
+    principal: float = Field(..., gt=0.0)
+    apr: float = Field(..., ge=0.0, le=0.50)
+    term_months: int = Field(..., ge=1, le=600)
+    down_payment: float = Field(0.0, ge=0.0)
+
+
 class FinancialInputs(BaseModel):
+    """Financial assumptions for the finance step. ``system_cost`` is
+    optional so the pipeline degrades gracefully — the finance step is
+    skipped when no capex is supplied (early Phase-1a smoke tests run
+    without finance)."""
+
     discount_rate: float = Field(0.06, ge=0, le=0.30)
     hold_years: int = Field(15, ge=1, le=40)
+    system_cost: float | None = Field(None, ge=0.0)
+    annual_opex: float = Field(0.0, ge=0.0)
+    rate_escalation: float = Field(0.025, ge=-0.10, le=0.20)
+    loan: LoanInputs | None = None
 
 
 class ConsumptionInputs(BaseModel):
