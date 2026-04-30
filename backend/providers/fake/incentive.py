@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from backend.providers.incentive import Incentive, IncentiveQuery
+from backend.providers.incentive import Incentive, IncentiveQuery, incentive_applies
 
 
 class FakeIncentiveProvider:
@@ -42,12 +42,4 @@ class FakeIncentiveProvider:
         self._catalog.append(incentive)
 
     async def fetch(self, query: IncentiveQuery) -> list[Incentive]:
-        return [incentive for incentive in self._catalog if _applies(incentive, query)]
-
-
-def _applies(incentive: Incentive, query: IncentiveQuery) -> bool:
-    if not query.jurisdiction.startswith(incentive.jurisdiction):
-        return False
-    if incentive.start_date and query.install_date < incentive.start_date:
-        return False
-    return not (incentive.end_date and query.install_date > incentive.end_date)
+        return [inc for inc in self._catalog if incentive_applies(inc, query)]

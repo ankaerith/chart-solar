@@ -22,11 +22,12 @@ from __future__ import annotations
 
 import json
 from datetime import date, timedelta
+from functools import lru_cache
 from importlib import resources
 
 from pydantic import BaseModel, Field, ValidationError
 
-from backend.providers.incentive import Incentive, IncentiveQuery
+from backend.providers.incentive import Incentive, IncentiveQuery, incentive_applies
 
 #: Resource path inside ``backend.providers.incentive`` for the seed.
 SEED_RESOURCE_PACKAGE = "backend.providers.incentive.seed_data"
@@ -50,13 +51,16 @@ class StateIncentiveSeed(BaseModel):
     incentives: list[Incentive]
 
 
+@lru_cache(maxsize=1)
 def load_seed() -> StateIncentiveSeed:
     """Read + validate the bundled JSON snapshot.
 
     Loads via ``importlib.resources`` so the file is found whether the
     package is installed from source or from a wheel. Raises a flat
     ``ValueError`` (not the bare Pydantic ``ValidationError``) so
-    callers can catch one type for any seed-load failure.
+    callers can catch one type for any seed-load failure. Cached because
+    the snapshot is a build-time constant — re-reading on every
+    ``StateIncentiveSeedProvider`` instantiation is wasted I/O.
     """
     raw = resources.files(SEED_RESOURCE_PACKAGE).joinpath(SEED_RESOURCE_FILENAME).read_text()
     payload = json.loads(raw)
@@ -69,24 +73,6 @@ def load_seed() -> StateIncentiveSeed:
 def is_stale(*, snapshot_date: date, today: date, stale_after_days: int) -> bool:
     """``True`` once the snapshot is older than its configured window."""
     return (today - snapshot_date) > timedelta(days=stale_after_days)
-
-
-def _matches(incentive: Incentive, query: IncentiveQuery) -> bool:
-    """Apply the same jurisdiction-prefix + date-window logic the
-    ``FakeIncentiveProvider`` uses, so swapping the seed for the fake
-    in a test changes only the catalogue, not the matching semantics.
-
-    ``query.jurisdiction.startswith(incentive.jurisdiction)`` lets a
-    state-scoped lookup ("US-NY") inherit federal entries scoped to
-    "US" while still excluding sibling states.
-    """
-    if not query.jurisdiction.startswith(incentive.jurisdiction):
-        return False
-    if incentive.start_date and query.install_date < incentive.start_date:
-        return False
-    if incentive.end_date and query.install_date > incentive.end_date:
-        return False
-    return True
 
 
 class StateIncentiveSeedProvider:
@@ -127,7 +113,7 @@ class StateIncentiveSeedProvider:
         return {inc.jurisdiction for inc in self._seed.incentives}
 
     async def fetch(self, query: IncentiveQuery) -> list[Incentive]:
-        return [inc for inc in self._seed.incentives if _matches(inc, query)]
+        return [inc for inc in self._seed.incentives if incentive_applies(inc, query)]
 
 
 __all__ = [
