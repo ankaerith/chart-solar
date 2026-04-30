@@ -1,27 +1,4 @@
-"""Redis + RQ. SQS adapter slot is left for the AWS path.
-
-Job lifecycle policy (chart-solar-zyf):
-
-* ``job_timeout`` — 5 minutes. The engine pipeline + a real TMY fetch
-  (NSRDB / PVGIS / Open-Meteo) lands well inside one minute on the
-  reference 8 kW system; 5 minutes leaves headroom for cold caches and
-  retried provider responses without letting a stuck job tie up a
-  worker indefinitely.
-* ``result_ttl`` — 24 hours. Matches the POST /api/forecast idempotency
-  window: a same-input resubmission within 24h must be able to fetch
-  the cached result by ``job_id`` rather than re-running the engine.
-  After 24h the result expires and the next POST starts a fresh job.
-* ``failure_ttl`` — 24 hours. Failed jobs are kept long enough for an
-  oncall engineer to inspect the traceback + correlation id; after that
-  they roll off automatically. Resubmitting an identical request after
-  failure_ttl elapses re-runs (the idempotency row also expires).
-* ``retry`` — RQ ``Retry(max=2, interval=[10, 30])``. TMY fetches hit
-  external providers that occasionally rate-limit or return transient
-  500s; two short re-tries cover the common case without hiding a
-  genuine outage. The engine math itself is deterministic, so once
-  the upstream call succeeds the retry budget is essentially never
-  consumed for engine reasons.
-"""
+"""Redis + RQ. SQS adapter slot is left for the AWS path."""
 
 from functools import lru_cache
 from typing import Any
@@ -65,13 +42,9 @@ def get_queue() -> Queue:
 
 def enqueue_forecast(job_id: str, payload: dict[str, Any]) -> None:
     """Enqueue a forecast job with the standard timeout / TTL / retry
-    policy and the active correlation ID stamped into job meta.
-
-    The correlation ID is read at enqueue time from contextvars and
-    stored on ``job.meta``; the worker reads it back in
-    ``run_forecast_job`` so log lines from the worker correlate with
-    the originating HTTP request even though they execute in a
-    different process.
+    policy and the request's correlation ID stamped into job meta — so
+    worker log lines correlate with the originating HTTP request even
+    though they execute in a different process.
     """
     from backend.workers.forecast_worker import run_forecast_job
 

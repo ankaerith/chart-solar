@@ -1,27 +1,9 @@
-"""End-to-end HTTP → RQ → HTTP smoke (chart-solar-zyf).
+"""End-to-end HTTP → RQ → HTTP smoke for the forecast endpoint.
 
-Exercises the full forecast lifecycle through the real public surface:
-
-* HTTP POST /api/forecast → returns ``{job_id, status: queued}``
-* RQ worker drains the queue in burst mode
-* HTTP GET /api/forecast/{job_id} → returns ``{job_id, status: done, result}``
-
-Pre-existing tests cover slices of this:
-
-* ``test_rq_smoke.py`` exercises queue → worker → ``Job.fetch`` directly,
-  bypassing the HTTP surface.
-* ``test_forecast_idempotency.py`` exercises POST dedup with the queue
-  patched out.
-
-This file is the seam between them — the only place we assert that the
-GET endpoint normalises RQ's status names into the contract's
-``queued|running|done|error`` vocabulary, and that ``result`` is wired
-through to the response body.
-
-Requires both Redis and Postgres (idempotency claim hits Postgres
-before enqueueing, worker round-trip needs Redis). Skips when either
-is unreachable so a developer with only one service running can still
-work on adjacent code.
+Pins the GET response shape and the RQ → API status mapping; pre-existing
+tests cover the queue (``test_rq_smoke``) and POST dedup
+(``test_forecast_idempotency``) in isolation. Skips when Redis or
+Postgres is unreachable so adjacent work isn't gated on both services.
 """
 
 from __future__ import annotations
