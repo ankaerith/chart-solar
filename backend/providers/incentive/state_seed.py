@@ -20,13 +20,16 @@ single boolean for the audit's "rate may be outdated" banner.
 
 from __future__ import annotations
 
-import json
-from datetime import date, timedelta
+from datetime import date
 from functools import lru_cache
-from importlib import resources
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
+from backend.providers._seed_common import (
+    BundledSeedProvider,
+    is_stale,
+    load_seed_resource,
+)
 from backend.providers.incentive import Incentive, IncentiveQuery, incentive_applies
 
 #: Resource path inside ``backend.providers.incentive`` for the seed.
@@ -55,27 +58,17 @@ class StateIncentiveSeed(BaseModel):
 def load_seed() -> StateIncentiveSeed:
     """Read + validate the bundled JSON snapshot.
 
-    Loads via ``importlib.resources`` so the file is found whether the
-    package is installed from source or from a wheel. Raises a flat
-    ``ValueError`` (not the bare Pydantic ``ValidationError``) so
-    callers can catch one type for any seed-load failure. Cached because
-    the snapshot is a build-time constant — re-reading on every
-    ``StateIncentiveSeedProvider`` instantiation is wasted I/O.
+    Cached because the snapshot is a build-time constant — re-reading
+    on every ``StateIncentiveSeedProvider`` instantiation is wasted I/O.
     """
-    raw = resources.files(SEED_RESOURCE_PACKAGE).joinpath(SEED_RESOURCE_FILENAME).read_text()
-    payload = json.loads(raw)
-    try:
-        return StateIncentiveSeed.model_validate(payload)
-    except ValidationError as exc:
-        raise ValueError(f"Incentive seed {SEED_RESOURCE_FILENAME!r} is malformed") from exc
+    return load_seed_resource(
+        package=SEED_RESOURCE_PACKAGE,
+        filename=SEED_RESOURCE_FILENAME,
+        model=StateIncentiveSeed,
+    )
 
 
-def is_stale(*, snapshot_date: date, today: date, stale_after_days: int) -> bool:
-    """``True`` once the snapshot is older than its configured window."""
-    return (today - snapshot_date) > timedelta(days=stale_after_days)
-
-
-class StateIncentiveSeedProvider:
+class StateIncentiveSeedProvider(BundledSeedProvider[StateIncentiveSeed]):
     """``IncentiveProvider``-compatible adapter over the bundled seed.
 
     Returns every incentive whose jurisdiction prefixes the query
@@ -93,18 +86,6 @@ class StateIncentiveSeedProvider:
     ) -> None:
         self._seed = seed if seed is not None else load_seed()
         self._today = today or date.today()
-
-    @property
-    def snapshot_date(self) -> date:
-        return self._seed.snapshot_date
-
-    @property
-    def stale(self) -> bool:
-        return is_stale(
-            snapshot_date=self._seed.snapshot_date,
-            today=self._today,
-            stale_after_days=self._seed.stale_warning_days,
-        )
 
     @property
     def jurisdictions(self) -> set[str]:
