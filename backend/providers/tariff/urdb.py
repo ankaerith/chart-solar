@@ -22,14 +22,17 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from datetime import date, timedelta
+from functools import lru_cache
 from importlib import resources
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
 from backend.providers.tariff import (
+    CurrencyCode,
     TariffQuery,
     TariffSchedule,
+    TariffStructure,
     TieredBlock,
     TouPeriod,
 )
@@ -54,8 +57,8 @@ class UrdbRateSeed(BaseModel):
     state: str
     rate_name: str
     urdb_label: str
-    structure: str
-    currency: str = "USD"
+    structure: TariffStructure
+    currency: CurrencyCode = "USD"
     fixed_monthly_charge: float = 0.0
     flat_rate_per_kwh: float | None = None
     tiered_blocks: list[TieredBlock] | None = None
@@ -117,6 +120,7 @@ def _to_schedule(rate: UrdbRateSeed) -> TariffSchedule:
     )
 
 
+@lru_cache(maxsize=1)
 def load_seed() -> UrdbSeed:
     """Read the bundled JSON snapshot into a validated ``UrdbSeed``.
 
@@ -124,6 +128,12 @@ def load_seed() -> UrdbSeed:
     package is checked out or installed from a wheel. Raises
     ``ValueError`` (not the bare Pydantic ``ValidationError``) so callers
     can catch one type for any seed-load failure.
+
+    Cached because the snapshot is a build-time constant — re-reading
+    the JSON on every ``UrdbSeedProvider`` instantiation would burn
+    disk I/O for no benefit. The cache is invalidated automatically on
+    ``SEED_RESOURCE_FILENAME`` rotation since the function is keyed on
+    the symbol's identity, not the filename string.
     """
     raw = resources.files(SEED_RESOURCE_PACKAGE).joinpath(SEED_RESOURCE_FILENAME).read_text()
     payload = json.loads(raw)
