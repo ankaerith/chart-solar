@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 
-from backend.engine.finance._solver import _bisect
+from backend.engine.finance._solver import _brent
 
 
 def npv(discount_rate: float, cashflows: list[float]) -> float:
@@ -38,10 +38,12 @@ def npv(discount_rate: float, cashflows: list[float]) -> float:
 def irr(cashflows: list[float], *, guess_low: float = -0.99, guess_high: float = 10.0) -> float:
     """Internal rate of return — the rate at which ``npv(rate, cashflows) == 0``.
 
-    Bisection on NPV; no SciPy. Requires at least one sign change in
-    the stream (a strictly-positive or strictly-negative stream has no
-    finite IRR — by convention we raise so the caller doesn't silently
-    quote a meaningless number on a stream that never breaks even).
+    Brent's method on NPV (super-linear convergence; ~10–20 iterations
+    vs ~200 for plain bisection at the same precision). No SciPy.
+    Requires at least one sign change in the stream — a strictly-
+    positive or strictly-negative stream has no finite IRR, and we
+    raise so the caller doesn't silently quote a meaningless number
+    on a stream that never breaks even.
     """
     if not cashflows:
         raise ValueError("cashflows must be non-empty")
@@ -58,7 +60,7 @@ def irr(cashflows: list[float], *, guess_low: float = -0.99, guess_high: float =
             f"NPV is {npv_low:.4g} at low, {npv_high:.4g} at high"
         )
 
-    return _bisect(lambda r: npv(r, cashflows), guess_low, guess_high)
+    return _brent(lambda r: npv(r, cashflows), guess_low, guess_high)
 
 
 def mirr(
