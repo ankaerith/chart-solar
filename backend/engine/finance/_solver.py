@@ -3,7 +3,7 @@
 Both call sites do the same thing: walk a closed bracket on a
 monotone-near-the-root function, narrowing until the residual is small
 enough or the bracket collapses. This file factors that loop out so a
-future Brent/Newton swap (chart-solar-nake) lands in one place.
+future Brent/Newton swap lands in one place.
 """
 
 from __future__ import annotations
