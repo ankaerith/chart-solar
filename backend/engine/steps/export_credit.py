@@ -138,7 +138,7 @@ def apply_seg_tou(
     )
 
 
-def _resolve_nem_one_rate(
+def _resolve_nem_one_rate_flat_or_tou(
     *,
     tariff: TariffSchedule,
     month: int,
@@ -146,8 +146,13 @@ def _resolve_nem_one_rate(
     hour_of_day: int,
     hour_index: int,
 ) -> float:
-    """The hour's marginal retail rate under NEM 1:1: the rate the
-    homeowner would have paid had they imported instead of exported."""
+    """The hour's marginal retail rate under NEM 1:1 for flat / TOU
+    tariffs. Tiered tariffs are billed via tier-walking netting in
+    ``_apply_nem_one_for_one_tiered`` rather than per-hour rate lookup,
+    because the marginal-displacement rate for an exported kWh under
+    a tiered tariff depends on the month's cumulative-import position
+    in the tier table — a per-hour rate doesn't exist.
+    """
     if tariff.structure == "flat":
         return tariff.flat_rate_per_kwh or 0.0
     if tariff.structure == "tou":
@@ -166,27 +171,138 @@ def _resolve_nem_one_rate(
                 "but no period matched — check tariff coverage"
             )
         return matched.rate_per_kwh
-    if tariff.structure == "tiered":
-        if not tariff.tiered_blocks:
-            raise ValueError("tiered tariff requires tiered_blocks")
-        # Conservative upper bound — the marginal $/kWh saved by
-        # avoiding an import is the top tier's rate.
-        return max(b.rate_per_kwh for b in tariff.tiered_blocks)
-    raise ValueError(f"unknown tariff structure: {tariff.structure!r}")
+    raise ValueError(
+        "tiered tariffs route through _apply_nem_one_for_one_tiered, not "
+        "the per-hour rate path — caller must pass hourly_net_load_kwh"
+    )
+
+
+def _walk_tier_charge(*, monthly_kwh: float, tariff: TariffSchedule) -> float:
+    """One month's energy charge for a tiered tariff: walk the blocks in
+    threshold order, billing each block at its own rate up to its
+    ``up_to_kwh_per_month`` threshold; the catch-all (no threshold)
+    handles whatever's above. Equivalent to ``_bill_tiered`` accumulated
+    one hour at a time, but operating on a single monthly total.
+    """
+    if monthly_kwh <= 0.0:
+        return 0.0
+    if not tariff.tiered_blocks:
+        raise ValueError("tiered tariff requires tiered_blocks")
+    sorted_blocks = sorted(
+        tariff.tiered_blocks,
+        key=lambda b: b.up_to_kwh_per_month if b.up_to_kwh_per_month is not None else float("inf"),
+    )
+    cursor = 0.0
+    remaining = monthly_kwh
+    charge = 0.0
+    for block in sorted_blocks:
+        if remaining <= 0.0:
+            break
+        threshold = block.up_to_kwh_per_month
+        if threshold is None:
+            charge += remaining * block.rate_per_kwh
+            return charge
+        if cursor >= threshold:
+            continue
+        portion = min(remaining, threshold - cursor)
+        charge += portion * block.rate_per_kwh
+        cursor += portion
+        remaining -= portion
+    return charge
+
+
+def _apply_nem_one_for_one_tiered(
+    *,
+    hourly_net_load_kwh: list[float],
+    tariff: TariffSchedule,
+) -> ExportCreditResult:
+    """NEM 1:1 retail-rate netting on a tiered tariff (chart-solar-f7n7).
+
+    Real-world PG&E E-1-style tiered NEM 1:1 nets export against import
+    within a billing month *before* tier walking, so a household
+    exporting 200 kWh and importing 500 kWh effectively imports 300 net
+    kWh — billed at the tariff's tier rates from cursor 0. Most of those
+    300 kWh sit in the lowest tier; the homeowner is *not* credited at
+    the top tier rate as the conservative upper bound previously
+    assumed.
+
+    Implementation: aggregate each month's imports and exports
+    separately, then bill the tier table on (a) imports-only and
+    (b) ``max(0, imports − exports)``. The credit per month is the
+    delta — i.e. the dollars the homeowner saves *because* the meter
+    nets in their favor before tier walking. Surplus exports beyond
+    same-month imports forfeit (the helper doesn't model NSC year-end
+    monetization; callers can layer that on top).
+    """
+    _validate_hourly(hourly_net_load_kwh, name="hourly_net_load_kwh")
+    if tariff.structure != "tiered":
+        raise ValueError(
+            f"_apply_nem_one_for_one_tiered expects structure='tiered' (got {tariff.structure!r})"
+        )
+
+    monthly_imports = [0.0] * 12
+    monthly_exports = [0.0] * 12
+    for hour_index, net in enumerate(hourly_net_load_kwh):
+        month_idx = _TMY_CALENDAR[hour_index][0] - 1
+        if net > 0.0:
+            monthly_imports[month_idx] += net
+        elif net < 0.0:
+            monthly_exports[month_idx] += -net
+
+    monthly_credit: list[float] = []
+    annual_kwh_credited = 0.0
+    for month_idx in range(12):
+        imports = monthly_imports[month_idx]
+        exports = monthly_exports[month_idx]
+        netted = max(0.0, imports - exports)
+        bill_imports = _walk_tier_charge(monthly_kwh=imports, tariff=tariff)
+        bill_netted = _walk_tier_charge(monthly_kwh=netted, tariff=tariff)
+        monthly_credit.append(bill_imports - bill_netted)
+        # Only the slice of exports that actually offset same-month
+        # imports counts as "credited"; surplus forfeits at month-end.
+        annual_kwh_credited += min(exports, imports)
+
+    return ExportCreditResult(
+        regime="nem_one_for_one",
+        monthly_credit=monthly_credit,
+        annual_credit=sum(monthly_credit),
+        annual_kwh_exported=annual_kwh_credited,
+    )
 
 
 def apply_nem_one_for_one(
     *,
     hourly_export_kwh: list[float],
     tariff: TariffSchedule,
+    hourly_net_load_kwh: list[float] | None = None,
 ) -> ExportCreditResult:
     """NEM 1:1 retail-rate net metering.
 
-    Each exported kWh credits at the rate it would have cost to import
-    in that hour. Tiered NEM 1:1 credits at the top tier's rate — the
-    conservative upper bound on the homeowner's marginal saving.
+    For **flat / TOU** tariffs: each exported kWh credits at the tariff
+    rate that would have applied had the same kWh been imported in that
+    hour. ``hourly_net_load_kwh`` is unused and may be omitted.
+
+    For **tiered** tariffs: requires ``hourly_net_load_kwh`` (signed —
+    positive = import, negative = export). The helper aggregates each
+    month's imports and exports separately and walks the tier table on
+    both ``imports-only`` and ``max(0, imports − exports)``; the credit
+    is the bill delta. This produces the correct PG&E-E1-style behavior
+    rather than crediting at the top-tier rate (a conservative upper
+    bound that overstated savings on net-importer households).
     """
     _validate_hourly(hourly_export_kwh, name="hourly_export_kwh")
+
+    if tariff.structure == "tiered":
+        if hourly_net_load_kwh is None:
+            raise ValueError(
+                "NEM 1:1 with a tiered tariff requires hourly_net_load_kwh "
+                "(signed: positive=import, negative=export) — tier-walking "
+                "netting can't be derived from exports alone"
+            )
+        return _apply_nem_one_for_one_tiered(
+            hourly_net_load_kwh=hourly_net_load_kwh,
+            tariff=tariff,
+        )
 
     monthly = [0.0] * 12
     total_kwh = 0.0
@@ -195,7 +311,7 @@ def apply_nem_one_for_one(
         if kwh == 0.0:
             continue
         month, is_weekday, hour_of_day = _TMY_CALENDAR[hour_index]
-        rate = _resolve_nem_one_rate(
+        rate = _resolve_nem_one_rate_flat_or_tou(
             tariff=tariff,
             month=month,
             is_weekday=is_weekday,
@@ -221,6 +337,7 @@ def apply_export_credit(
     hourly_avoided_cost_per_kwh: list[float] | None = None,
     hourly_rate_per_kwh: list[float] | None = None,
     rate_per_kwh: float | None = None,
+    hourly_net_load_kwh: list[float] | None = None,
 ) -> ExportCreditResult:
     """Single dispatch entry point for the four export-credit regimes.
 
@@ -230,11 +347,20 @@ def apply_export_credit(
     ``engine.export_credit`` and supplies the regime + the matching
     payload — keeping the registry single-keyed avoids the need to
     fan ``engine.export_credit.<regime>`` keys through tier configs.
+
+    ``hourly_net_load_kwh`` (signed: positive = import, negative = export)
+    is required only for **NEM 1:1 with a tiered tariff** — the
+    tier-walking netting can't be derived from exports alone. Other
+    regime/structure pairs ignore it.
     """
     if regime == "nem_one_for_one":
         if tariff is None:
             raise ValueError("nem_one_for_one regime requires `tariff`")
-        return apply_nem_one_for_one(hourly_export_kwh=hourly_export_kwh, tariff=tariff)
+        return apply_nem_one_for_one(
+            hourly_export_kwh=hourly_export_kwh,
+            tariff=tariff,
+            hourly_net_load_kwh=hourly_net_load_kwh,
+        )
     if regime == "nem_three_nbt":
         if hourly_avoided_cost_per_kwh is None:
             raise ValueError("nem_three_nbt regime requires `hourly_avoided_cost_per_kwh`")
