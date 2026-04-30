@@ -5,10 +5,10 @@ from __future__ import annotations
 import pytest
 
 from backend.engine.steps.tariff import (
-    HOURS_PER_TMY,
     AnnualBill,
     compute_annual_bill,
 )
+from backend.providers.irradiance import HOURS_PER_TMY
 from backend.providers.tariff import (
     TariffSchedule,
     TieredBlock,

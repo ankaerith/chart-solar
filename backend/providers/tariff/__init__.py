@@ -91,6 +91,30 @@ class TariffProvider(Protocol):
     async def fetch(self, query: TariffQuery) -> TariffSchedule: ...
 
 
+def first_matching_tou_period(
+    periods: list[TouPeriod],
+    *,
+    month: int,
+    is_weekday: bool,
+    hour_of_day: int,
+) -> TouPeriod | None:
+    """First ``TouPeriod`` whose month list + weekday flag + hour mask
+    cover the given hour, or ``None`` if no period matches.
+
+    Authors of TOU schedules write non-overlapping bands, so first-match
+    is a faithful read; any unmatched hour is a tariff-authoring bug.
+    Callers wanting the rate read ``.rate_per_kwh`` from the result.
+    """
+    for period in periods:
+        if month not in period.months:
+            continue
+        if period.is_weekday is not is_weekday:
+            continue
+        if period.hour_mask[hour_of_day]:
+            return period
+    return None
+
+
 __all__ = [
     "CurrencyCode",
     "TariffProvider",
@@ -99,4 +123,5 @@ __all__ = [
     "TariffStructure",
     "TieredBlock",
     "TouPeriod",
+    "first_matching_tou_period",
 ]

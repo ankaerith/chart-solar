@@ -5,13 +5,13 @@ from __future__ import annotations
 import pytest
 
 from backend.engine.steps.export_credit import (
-    HOURS_PER_TMY,
     ExportCreditResult,
     apply_nem_one_for_one,
     apply_nem_three_nbt,
     apply_seg_flat,
     apply_seg_tou,
 )
+from backend.providers.irradiance import HOURS_PER_TMY
 from backend.providers.tariff import (
     TariffSchedule,
     TieredBlock,

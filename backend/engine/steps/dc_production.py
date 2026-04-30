@@ -17,8 +17,6 @@ pipeline (real spec sheets), not user-facing toggles.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-
 import pandas as pd
 import pvlib
 from pvlib.location import Location
@@ -28,7 +26,7 @@ from pydantic import BaseModel, Field
 
 from backend.engine.inputs import SystemInputs
 from backend.engine.registry import register
-from backend.providers.irradiance import HOURS_PER_TMY, TmyData
+from backend.providers.irradiance import HOURS_PER_TMY, TmyData, tmy_datetime_index
 
 #: PVWatts default temperature coefficient of power (1/°C). Manufacturer
 #: data sheets vary by chemistry — mono-Si is closer to ``-0.0035``,
@@ -61,20 +59,6 @@ class DcProductionResult(BaseModel):
     peak_ac_kw: float = Field(..., ge=0.0)
     inverter_ac_kw: float = Field(..., gt=0.0)
     dc_ac_ratio: float = Field(..., gt=0.0)
-
-
-def _index_for_tmy(tmy: TmyData) -> pd.DatetimeIndex:
-    """Build a 8760-hour DatetimeIndex localised to ``tmy.timezone``.
-
-    pvlib insists on a tz-aware index — naive timestamps would silently
-    use UTC and shift the daily irradiance curve by the local offset.
-    Year of the index is arbitrary (TMY is a synthetic year), so we use
-    a non-leap year to guarantee 8760 hours and keep the index stable
-    across calls.
-    """
-    start = datetime(2023, 1, 1, 0, tzinfo=UTC)
-    naive_hours = [start + timedelta(hours=i) for i in range(HOURS_PER_TMY)]
-    return pd.DatetimeIndex(naive_hours).tz_convert(tmy.timezone)
 
 
 def _weather_frame(tmy: TmyData, index: pd.DatetimeIndex) -> pd.DataFrame:
@@ -112,7 +96,7 @@ def run_dc_production(
     if inverter_ac_kw <= 0:
         raise ValueError("inverter_ac_kw must be > 0")
 
-    index = _index_for_tmy(tmy)
+    index = tmy_datetime_index(tmy.timezone)
     weather = _weather_frame(tmy, index)
 
     location = Location(

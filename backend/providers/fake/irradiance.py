@@ -12,12 +12,16 @@ modeling accuracy benchmarks.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
-import pandas as pd
 from pvlib.location import Location
 
-from backend.providers.irradiance import HOURS_PER_TMY, IrradianceSource, TmyData
+from backend.providers.irradiance import (
+    HOURS_PER_TMY,
+    IrradianceSource,
+    TmyData,
+    tmy_datetime_index,
+)
 
 
 class FakeIrradianceProvider:
@@ -53,10 +57,7 @@ def synthetic_tmy(
     temperature and wind speed are constants — sufficient for engine
     correctness tests that don't care about realistic seasonal swings.
     """
-    naive_hours = pd.DatetimeIndex(
-        [datetime(2023, 1, 1, 0, tzinfo=UTC) + timedelta(hours=i) for i in range(HOURS_PER_TMY)]
-    )
-    index = naive_hours.tz_convert(timezone)
+    index = tmy_datetime_index(timezone)
     location = Location(latitude=lat, longitude=lon, tz=timezone, altitude=elevation_m)
     clear_sky = location.get_clearsky(index, model="ineichen")
 
