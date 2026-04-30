@@ -4,6 +4,8 @@ The pipeline's `finance` step composes the modules here:
 
 * `amortization` — fixed + variable-rate loan schedules
 * `cashflow` — NPV / IRR / MIRR / discounted payback / LCOE / crossover
+* `sale` — probability-weighted sale-scenario NPV with LBNL Hoen
+  home-value uplift
 
 Everything is deterministic and side-effect-free — no IO, no providers,
 no engine state. Tests live in `backend/tests/test_finance_*`.
@@ -26,16 +28,30 @@ from backend.engine.finance.cashflow import (
     mirr,
     npv,
 )
+from backend.engine.finance.sale import (
+    HoldYearProbability,
+    SaleScenarioInputs,
+    SaleScenarioOutcome,
+    SaleScenarioResult,
+    expected_sale_npv,
+    home_value_uplift,
+)
 
 __all__ = [
     "AmortizationRow",
     "AmortizationSchedule",
+    "HoldYearProbability",
+    "SaleScenarioInputs",
+    "SaleScenarioOutcome",
+    "SaleScenarioResult",
     "amortize",
     "amortize_variable",
     "annualized_return",
     "crossover_year",
     "dealer_fee_effective_apr",
     "discounted_payback_years",
+    "expected_sale_npv",
+    "home_value_uplift",
     "irr",
     "lcoe",
     "mirr",
