@@ -6,7 +6,7 @@ import pytest
 
 from backend.engine.inputs import (
     ConsumptionInputs,
-    ExportCreditInputs,
+    ExportCreditConfig,
     FinancialInputs,
     ForecastInputs,
     NbtConfig,
@@ -43,7 +43,7 @@ def _flat_tariff() -> TariffSchedule:
     )
 
 
-def _inputs(*, export_credit: ExportCreditInputs) -> ForecastInputs:
+def _inputs(*, export_credit: ExportCreditConfig) -> ForecastInputs:
     return ForecastInputs(
         system=SystemInputs(
             lat=33.45,
@@ -67,7 +67,7 @@ def _inputs(*, export_credit: ExportCreditInputs) -> ForecastInputs:
     )
 
 
-def _run(export_credit: ExportCreditInputs) -> FinanceResult:
+def _run(export_credit: ExportCreditConfig) -> FinanceResult:
     inputs = _inputs(export_credit=export_credit)
     tmy = synthetic_tmy(lat=inputs.system.lat, lon=inputs.system.lon)
     finance = run_forecast(inputs, tmy=tmy).artifacts["engine.finance"]

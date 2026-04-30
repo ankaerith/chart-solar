@@ -32,7 +32,6 @@ if TYPE_CHECKING:
 __all__ = [
     "ConsumptionInputs",
     "ExportCreditConfig",
-    "ExportCreditInputs",
     "ExportRegime",
     "FinancialInputs",
     "ForecastInputs",
@@ -144,13 +143,6 @@ ExportCreditConfig = Annotated[
     Field(discriminator="regime"),
 ]
 
-#: Public alias used at the engine IO boundary. Type-equivalent to
-#: ``ExportCreditConfig``; the two names exist so call sites can read
-#: the field type ``export_credit: ExportCreditInputs | None`` while
-#: code that constructs a regime variant imports it as ``ExportCreditConfig``
-#: (or, more typically, the specific variant class).
-ExportCreditInputs = ExportCreditConfig
-
 
 class SystemInputs(BaseModel):
     lat: float = Field(..., ge=-90, le=90)
@@ -205,7 +197,7 @@ class TariffInputs(BaseModel):
     country: str = Field("US", min_length=2, max_length=2)
     utility: str | None = None
     schedule: TariffSchedule | None = None
-    export_credit: ExportCreditInputs | None = None
+    export_credit: ExportCreditConfig | None = None
 
 
 class ForecastInputs(BaseModel):

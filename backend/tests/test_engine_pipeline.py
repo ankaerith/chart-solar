@@ -17,7 +17,7 @@ import pytest
 
 from backend.engine.inputs import (
     ConsumptionInputs,
-    ExportCreditInputs,
+    ExportCreditConfig,
     FinancialInputs,
     ForecastInputs,
     LoanInputs,
@@ -52,7 +52,7 @@ def _flat_tariff(rate: float = 0.16, fixed: float = 10.0) -> TariffSchedule:
 def _baseline_inputs(
     *,
     schedule: TariffSchedule | None = None,
-    export_credit: ExportCreditInputs | None = None,
+    export_credit: ExportCreditConfig | None = None,
     consumption: ConsumptionInputs | None = None,
     hold_years: int = 25,
     financial: FinancialInputs | None = None,

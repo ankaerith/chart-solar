@@ -31,6 +31,13 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from backend.engine.inputs import (
+    ExportCreditConfig,
+    NbtConfig,
+    NemOneForOneConfig,
+    SegFlatConfig,
+    SegTouConfig,
+)
 from backend.engine.registry import register
 from backend.engine.steps.tariff import sort_tiered_blocks, walk_tier_charge
 from backend.engine.types import ExportRegime
@@ -317,19 +324,6 @@ def apply_export_credit(
         hourly_net_load_kwh=hourly_net_load_kwh,
     )
 
-
-# Re-exported here so callers can grab the union from one place. The
-# variant classes themselves live in ``backend.engine.inputs`` because
-# they are part of the IO boundary — putting them here would create
-# an import cycle (engine.steps.* eagerly load each step module, which
-# would re-enter inputs.py).
-from backend.engine.inputs import (  # noqa: E402
-    ExportCreditConfig,
-    NbtConfig,
-    NemOneForOneConfig,
-    SegFlatConfig,
-    SegTouConfig,
-)
 
 __all__ = [
     "ExportCreditConfig",
