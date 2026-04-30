@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import math
 
+from backend.engine.finance._solver import _bisect
+
 
 def npv(discount_rate: float, cashflows: list[float]) -> float:
     """Net present value at ``discount_rate`` of an annual cashflow stream.
@@ -56,23 +58,7 @@ def irr(cashflows: list[float], *, guess_low: float = -0.99, guess_high: float =
             f"NPV is {npv_low:.4g} at low, {npv_high:.4g} at high"
         )
 
-    low, high = guess_low, guess_high
-    for _ in range(200):
-        mid = (low + high) / 2.0
-        if (high - low) < 1e-12:
-            return mid
-        npv_mid = npv(mid, cashflows)
-        if abs(npv_mid) < 1e-9:
-            return mid
-        # Track sign at the moving endpoint so the bracket invariant
-        # holds for both standard and sign-flipped cashflow streams.
-        if npv_mid * npv_low > 0:
-            low = mid
-            npv_low = npv_mid
-        else:
-            high = mid
-
-    return (low + high) / 2.0
+    return _bisect(lambda r: npv(r, cashflows), guess_low, guess_high)
 
 
 def mirr(

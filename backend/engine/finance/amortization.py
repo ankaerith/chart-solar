@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from backend.engine.finance._solver import _bisect
+
 
 class AmortizationRow(BaseModel):
     month: int = Field(..., ge=1)
@@ -157,18 +159,11 @@ def dealer_fee_effective_apr(
         # Degenerate input; return the upper-bracket annual rate.
         return high * 12.0
 
-    pv_tolerance = 1e-9 * max(cash_price, 1.0)
-    bracket_tolerance = 1e-12
-    for _ in range(200):
-        mid = (low + high) / 2.0
-        if (high - low) < bracket_tolerance:
-            return mid * 12.0
-        pv_mid = pv_at_rate(mid)
-        if abs(pv_mid - cash_price) < pv_tolerance:
-            return mid * 12.0
-        if pv_mid > cash_price:
-            low = mid
-        else:
-            high = mid
-
-    return ((low + high) / 2.0) * 12.0
+    monthly_rate = _bisect(
+        pv_at_rate,
+        low,
+        high,
+        target=cash_price,
+        tol=1e-9 * max(cash_price, 1.0),
+    )
+    return monthly_rate * 12.0
