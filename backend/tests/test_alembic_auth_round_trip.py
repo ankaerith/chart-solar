@@ -7,7 +7,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 AUTH_REVISION_ID = "a8b2c4d6e9f1"
-PARENT_REVISION_ID = "8b3e7a1c4d20"
+PARENT_REVISION_ID = "a1f2c4d6b8e0"
 
 
 @pytest.fixture(scope="module")

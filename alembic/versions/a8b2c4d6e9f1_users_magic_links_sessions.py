@@ -1,7 +1,7 @@
 """users + magic_links + sessions
 
 Revision ID: a8b2c4d6e9f1
-Revises: 8b3e7a1c4d20
+Revises: a1f2c4d6b8e0
 Create Date: 2026-04-30 23:30:00.000000
 
 Auth tables backing the magic-link flow (chart-solar-ij9). Tokens are
@@ -19,7 +19,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 revision: str = "a8b2c4d6e9f1"
-down_revision: str | Sequence[str] | None = "8b3e7a1c4d20"
+down_revision: str | Sequence[str] | None = "a1f2c4d6b8e0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
