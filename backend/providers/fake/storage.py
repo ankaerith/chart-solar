@@ -13,8 +13,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
+from backend.infra.util import utc_now
 from backend.providers.storage import (
     ObjectNotFoundError,
     StoredObject,
@@ -27,10 +28,6 @@ class _Record:
     content_type: str
     metadata: dict[str, str]
     last_modified: datetime
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 class FakeStorageProvider:
@@ -46,7 +43,7 @@ class FakeStorageProvider:
         self,
         *,
         bucket: str = "fake-bucket",
-        clock: Callable[[], datetime] = _utc_now,
+        clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._bucket = bucket
         self._objects: dict[str, _Record] = {}

@@ -21,10 +21,9 @@ don't silently invalidate live cache entries.
 from __future__ import annotations
 
 import functools
-import hashlib
 import json
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, TypeVar, cast
 
 from fastapi import HTTPException, Request, Response, status
@@ -36,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import backend.database as _db
 from backend.db.models import IdempotencyKey, StripeEvent
 from backend.infra.logging import get_logger
+from backend.infra.util import sha256_hex, utc_now
 
 logger = get_logger(__name__)
 
@@ -50,13 +50,13 @@ def canonical_request_hash(body: bytes) -> str:
     semantically identical JSON with different whitespace get treated
     as the same request."""
     if not body:
-        return hashlib.sha256(b"").hexdigest()
+        return sha256_hex(b"")
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError:
-        return hashlib.sha256(body).hexdigest()
+        return sha256_hex(body)
     canonical = json.dumps(parsed, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(canonical).hexdigest()
+    return sha256_hex(canonical)
 
 
 async def _lookup(
@@ -139,7 +139,7 @@ async def lookup_idempotency_response(
     idempotency key from the request body rather than a header — they
     don't need direct ORM access, just the cached response bytes.
     """
-    row = await _lookup(session, route, key, now or datetime.now(UTC))
+    row = await _lookup(session, route, key, now or utc_now())
     if row is None:
         return None
     return dict(row.response_body)
@@ -163,7 +163,7 @@ async def claim_idempotency_slot(
     charge a card — and return ``body``); ``won`` is False on a race
     loss, in which case ``body`` is the prior writer's cached response.
     """
-    when = now or datetime.now(UTC)
+    when = now or utc_now()
     result = await session.execute(
         _claim_insert_stmt(
             route=route,
@@ -229,7 +229,7 @@ def idempotent(
 
             body = await request.body()
             request_hash = canonical_request_hash(body)
-            now = datetime.now(UTC)
+            now = utc_now()
 
             async with _db.SessionLocal() as session:
                 existing = await _lookup(session, route_key, key, now)

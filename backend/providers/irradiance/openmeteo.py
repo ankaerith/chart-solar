@@ -11,10 +11,11 @@ most recently completed calendar year hourly.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Any
 
 from backend.infra.http import make_get
+from backend.infra.util import utc_now
 from backend.providers.irradiance import HOURS_PER_TMY, IrradianceSource, TmyData
 from backend.providers.irradiance._aggregation import (
     aggregate_daily_to_monthly_sum,
@@ -122,7 +123,7 @@ def parse_openmeteo_json(
         elevation_m=elevation,
         timezone=timezone,
         source="openmeteo",
-        fetched_at=datetime.now(UTC),
+        fetched_at=utc_now(),
         ghi_w_m2=channels["ghi"],
         dni_w_m2=channels["dni"],
         dhi_w_m2=channels["dhi"],
