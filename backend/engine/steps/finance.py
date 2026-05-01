@@ -30,6 +30,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from backend.domain.tariff import TariffSchedule
+from backend.domain.tmy import HOURS_PER_TMY
 from backend.engine.finance import (
     AmortizationSchedule,
     amortize,
@@ -52,8 +54,6 @@ from backend.engine.steps.dc_production import DcProductionResult
 from backend.engine.steps.degradation import DegradationCurve
 from backend.engine.steps.export_credit import apply_export_credit
 from backend.engine.steps.tariff import compute_annual_bill
-from backend.providers.irradiance import HOURS_PER_TMY
-from backend.providers.tariff import TariffSchedule
 
 
 class FinanceResult(BaseModel):

@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from backend.domain.tariff import TariffSchedule
 from backend.engine.inputs import ExportCreditConfig, FinancialInputs
 from backend.engine.steps.dc_production import DcProductionResult
 from backend.engine.steps.degradation import (
@@ -33,7 +34,6 @@ from backend.engine.steps.degradation import (
 )
 from backend.engine.steps.finance import run_finance
 from backend.engine.steps.monte_carlo import _scaled_dc
-from backend.providers.tariff import TariffSchedule
 
 if TYPE_CHECKING:
     from backend.engine.pipeline import ForecastState

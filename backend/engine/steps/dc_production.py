@@ -24,9 +24,9 @@ from pvlib.modelchain import ModelChain
 from pvlib.pvsystem import Array, FixedMount, PVSystem
 from pydantic import BaseModel, Field
 
+from backend.domain.tmy import HOURS_PER_TMY, TmyData, tmy_datetime_index
 from backend.engine.inputs import SystemInputs
 from backend.engine.registry import register
-from backend.providers.irradiance import HOURS_PER_TMY, TmyData, tmy_datetime_index
 
 #: PVWatts default temperature coefficient of power (1/°C). Manufacturer
 #: data sheets vary by chemistry — mono-Si is closer to ``-0.0035``,

@@ -28,10 +28,10 @@ import math
 
 from pydantic import BaseModel, Field
 
+from backend.domain.tariff import TariffSchedule, TouPeriod, first_matching_tou_period
+from backend.domain.tmy import HOURS_PER_TMY, tmy_hour_calendar
 from backend.engine.inputs import BatteryInputs, DispatchStrategy
 from backend.engine.registry import register
-from backend.providers.irradiance import HOURS_PER_TMY, tmy_hour_calendar
-from backend.providers.tariff import TariffSchedule, TouPeriod, first_matching_tou_period
 
 
 class BatteryDispatchResult(BaseModel):

@@ -25,11 +25,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from backend.domain.tmy import HOURS_PER_TMY, TmyData
 from backend.engine.inputs import ConsumptionInputs, ForecastInputs
 from backend.engine.registry import StepFn, steps_for
 from backend.engine.snapshot import build_snapshot
 from backend.engine.steps.dc_production import DcProductionResult
-from backend.providers.irradiance import HOURS_PER_TMY, TmyData
 
 #: Canonical execution order. Pipeline iterates this list, skipping any
 #: key that is either unregistered or absent from the caller's requested

@@ -98,28 +98,21 @@ plugins = ["pydantic.mypy"]
 root_packages = ["backend"]
 
 [[tool.importlinter.contracts]]
-# `engine.*` may not depend on the IO / orchestration layers. Keeps the
-# engine deterministic and re-runnable from a `(state) -> state` shell.
-# `providers/*` is currently imported by the engine for shared types
-# (TmyData, TariffSchedule, …) — that coupling is tracked in
-# chart-solar-av6u (relocate shared types to `domain/`) and tolerated
-# until then. Add `backend.domain` to `source_modules` when that
-# package lands.
+# `engine.*` and `domain.*` are pure-math layers. They may not depend
+# on the IO / orchestration layers — keeps the engine deterministic
+# and re-runnable from a `(state) -> state` shell. Shared types
+# (TmyData, TariffSchedule, …) live in `backend.domain.*`; the engine
+# imports them from there, never from `backend.providers.*`.
 name = "engine is pure"
 type = "forbidden"
-source_modules = ["backend.engine"]
+source_modules = ["backend.engine", "backend.domain"]
 forbidden_modules = [
     "backend.api",
     "backend.workers",
     "backend.infra",
     "backend.db",
+    "backend.providers",
 ]
-# Engine imports `backend.providers.irradiance` for shared types
-# (TmyData, …); that subpackage's own adapters reach into
-# `backend.infra.http`. The engine never sees `infra` as a name itself,
-# so let import-linter follow that distinction instead of flagging the
-# transitive chain.
-allow_indirect_imports = "true"
 
 [[tool.importlinter.contracts]]
 # `api.*` shapes responses; long-running compute always goes through
