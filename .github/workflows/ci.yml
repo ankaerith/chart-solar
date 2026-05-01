@@ -40,6 +40,9 @@ jobs:
       - run: uv run ruff check
       - run: uv run ruff format --check
       - run: uv run mypy backend
+      # Backend-layout enforcement: engine purity + api/workers seam.
+      # Rules live in `[tool.importlinter]`; new violations fail CI.
+      - run: uv run lint-imports
       # --cov picks up source/omit/fail_under from [tool.coverage.*] in
       # pyproject.toml; CI fails when total coverage drops below the gate.
       - run: uv run pytest --cov

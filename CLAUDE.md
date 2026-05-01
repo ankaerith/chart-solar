@@ -52,12 +52,13 @@ bd close <id>         # Complete work
 
 ## Quality gates
 
-Before committing backend changes, run all four gates locally — CI runs the same set and `ruff format --check` is easy to miss because `ruff check` doesn't cover formatting:
+Before committing backend changes, run all five gates locally — CI runs the same set and `ruff format --check` is easy to miss because `ruff check` doesn't cover formatting:
 
 ```bash
 uv run ruff check backend/         # lint
 uv run ruff format --check backend/  # formatting (separate from lint!)
 uv run mypy backend/               # strict types
+uv run lint-imports                # backend-layout rules (engine purity, etc.)
 uv run pytest --cov                # tests + coverage gate
 ```
 
