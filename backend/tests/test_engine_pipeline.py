@@ -76,6 +76,7 @@ def test_canonical_step_order_matches_phase_1a_pipeline() -> None:
         "engine.consumption",
         "engine.dc_production",
         "engine.degradation",
+        "engine.battery_dispatch",
         "engine.tariff",
         "engine.export_credit",
         "engine.finance",

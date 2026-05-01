@@ -40,6 +40,7 @@ ENGINE_STEP_ORDER: tuple[str, ...] = (
     "engine.consumption",
     "engine.dc_production",
     "engine.degradation",
+    "engine.battery_dispatch",
     "engine.tariff",
     "engine.export_credit",
     "engine.finance",
@@ -152,6 +153,19 @@ def _adapter_degradation(state: ForecastState, fn: StepFn) -> None:
     state.artifacts["engine.degradation"] = fn(years=state.inputs.financial.hold_years)
 
 
+def _adapter_battery_dispatch(state: ForecastState, fn: StepFn) -> None:
+    # Battery is opt-in: skip silently when no BatteryInputs supplied
+    # so existing forecasts (no battery configured) keep their shape.
+    battery = state.inputs.battery
+    if battery is None:
+        return
+    state.artifacts["engine.battery_dispatch"] = fn(
+        battery=battery,
+        hourly_net_load_kwh=_net_load(state),
+        tariff=state.inputs.tariff.schedule,
+    )
+
+
 def _adapter_tariff(state: ForecastState, fn: StepFn) -> None:
     schedule = state.inputs.tariff.schedule
     if schedule is None:
@@ -201,6 +215,7 @@ def _adapter_finance(state: ForecastState, fn: StepFn) -> None:
 _ADAPTERS: dict[str, _StepAdapter] = {
     "engine.dc_production": _adapter_dc_production,
     "engine.degradation": _adapter_degradation,
+    "engine.battery_dispatch": _adapter_battery_dispatch,
     "engine.tariff": _adapter_tariff,
     "engine.export_credit": _adapter_export_credit,
     "engine.finance": _adapter_finance,
