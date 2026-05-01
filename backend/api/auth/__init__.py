@@ -1,24 +1,11 @@
 """FastAPI dependencies for the authentication boundary.
 
-:func:`require_authenticated` gates a route on a caller having a real
-user id. Today, ``current_user_id`` returns ``"anonymous"``; this dep
-refuses anonymous callers with HTTP 401. When magic-link auth lands
-(chart-solar-ij9) the dep stays put — only its delegate
-``current_user_id`` swaps to the JWT-bound implementation.
+:func:`require_authenticated` rejects anonymous callers with HTTP 401.
 
-Owner enforcement is intentionally **not** a Python-side helper here:
-every user-scoped query in ``backend/services/audit_service.py``
-(``find_audit_owned_by``, ``delete_audit_owned_by``,
-``delete_pii_vault_for_user``) filters by ``user_id`` in the SQL WHERE
-clause. There is no load-then-check path, so a wrong-owner request
-returns the same "no row" result as a genuinely-missing row — which the
-route surfaces as HTTP 404, never 403, to prevent ID enumeration. New
-user-scoped resources should follow the same pattern (scope the query,
-let "not found" cover both cases).
-
-This module lives under ``backend/api/auth/`` so future auth surface
-(login, sign-out, magic-link, JWT helpers) can stack alongside without
-forcing ``api/`` itself to grow a flat 20-module file dump.
+Owner enforcement happens in SQL: user-scoped queries filter by
+``user_id`` in the WHERE clause, so wrong-owner and not-found collapse
+to the same "no row" result and the route returns 404 rather than 403
+(prevents ID enumeration). See ``docs/ENGINEERING.md`` § DoD #8.
 """
 
 from __future__ import annotations

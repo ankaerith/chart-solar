@@ -1,16 +1,8 @@
 """GET / DELETE /api/audits/{id}.
 
-The minimal owner-scoped read + delete pair so the user-scoped access
-boundary has at least one resource exercising it today. The audit model
-already exists; the read route doesn't return anything sensitive yet
-(full extraction payloads land in chart-solar-c1a) but the access
-boundary is here so future fields inherit the discipline by default
-rather than being bolted on.
-
-Both endpoints scope the SQL by ``user_id`` (via the audit_service
-helpers) so the only way to read or delete a row is to own it. That's
-the row-level access criterion (chart-solar-kqkr #3); a wrong-owner
-request returns 404, never 403, so an attacker can't enumerate ids.
+Owner-scoped read + delete. Both endpoints filter by ``user_id`` via the
+``audit_service`` helpers; a wrong-owner request returns 404, never 403
+(prevents ID enumeration).
 """
 
 from __future__ import annotations
