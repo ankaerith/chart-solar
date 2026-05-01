@@ -63,8 +63,10 @@ class StorageProvider(Protocol):
     * write objects encrypted at rest (SSE-S3 or stronger);
     * never set a public ACL — buckets are private and access is
       brokered through signed URLs at a higher layer when needed;
-    * raise :class:`ObjectNotFoundError` (a :class:`StorageError`
-      subclass) when a key is missing on ``get`` / ``delete``;
+    * raise :class:`ObjectNotFoundError` from ``get`` when a key is missing;
+    * make ``delete`` idempotent — missing keys complete cleanly without
+      raising (S3's ``DeleteObject`` is itself idempotent; matching that
+      semantically lets callers run sweeps without per-row probes);
     * be safe to call concurrently from multiple coroutines on the
       same adapter instance.
     """
@@ -87,13 +89,7 @@ class StorageProvider(Protocol):
         ...
 
     async def delete(self, key: str) -> None:
-        """Remove ``key``; raise :class:`ObjectNotFoundError` if missing.
-
-        The PDF TTL purge (chart-solar-ebo) treats a successful delete
-        and a missing-key delete as equivalent — it catches
-        :class:`ObjectNotFoundError` and continues. Other callers can
-        decide for themselves.
-        """
+        """Remove ``key``. Idempotent — missing keys are not an error."""
         ...
 
     async def exists(self, key: str) -> bool:
@@ -106,13 +102,7 @@ class StorageProvider(Protocol):
         prefix: str = "",
         limit: int = 1000,
     ) -> list[StoredObject]:
-        """Return up to ``limit`` objects whose key starts with ``prefix``.
-
-        Pagination is intentionally absent in v1 — the only caller is
-        the TTL purge job, which works one bounded batch at a time. If
-        a bigger sweep is needed, add cursor-based pagination here and
-        update both adapters in lockstep.
-        """
+        """Return up to ``limit`` objects whose key starts with ``prefix``."""
         ...
 
 

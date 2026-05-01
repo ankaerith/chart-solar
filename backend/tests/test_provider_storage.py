@@ -59,10 +59,11 @@ async def test_fake_get_missing_raises_object_not_found() -> None:
     assert info.value.key == "nope"
 
 
-async def test_fake_delete_missing_raises_object_not_found() -> None:
+async def test_fake_delete_missing_is_idempotent() -> None:
     p = FakeStorageProvider()
-    with pytest.raises(ObjectNotFoundError):
-        await p.delete("nope")
+    # Idempotent contract — must not raise.
+    await p.delete("nope")
+    assert await p.exists("nope") is False
 
 
 async def test_fake_exists_distinguishes_present_from_absent() -> None:
@@ -268,7 +269,7 @@ async def test_s3_get_translates_no_such_key_to_object_not_found(
         await p.get("missing")
 
 
-async def test_s3_delete_probes_first_and_raises_when_missing(
+async def test_s3_delete_is_one_round_trip_and_idempotent_on_missing(
     s3_settings: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -277,12 +278,10 @@ async def test_s3_delete_probes_first_and_raises_when_missing(
     stub = _install_stub_client(monkeypatch)
     p = S3StorageProvider()
 
-    with pytest.raises(ObjectNotFoundError):
-        await p.delete("missing")
-
-    # We probed via head_object but never issued the delete.
-    assert stub.head_calls == [{"Bucket": "test-bucket", "Key": "missing"}]
-    assert stub.delete_calls == []
+    # S3 DeleteObject is itself idempotent; we don't probe with head.
+    await p.delete("missing")
+    assert stub.head_calls == []
+    assert stub.delete_calls == [{"Bucket": "test-bucket", "Key": "missing"}]
 
 
 async def test_s3_delete_removes_existing_object(

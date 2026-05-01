@@ -93,9 +93,8 @@ class FakeStorageProvider:
         return record.data
 
     async def delete(self, key: str) -> None:
-        if key not in self._objects:
-            raise ObjectNotFoundError(key)
-        del self._objects[key]
+        # Idempotent: missing keys are not an error (matches S3 DeleteObject).
+        self._objects.pop(key, None)
 
     async def exists(self, key: str) -> bool:
         return key in self._objects

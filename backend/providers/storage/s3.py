@@ -142,17 +142,9 @@ class S3StorageProvider:
             return await body.read()  # type: ignore[no-any-return]
 
     async def delete(self, key: str) -> None:
+        # S3 ``DeleteObject`` is idempotent and returns 204 whether or not
+        # the key existed; we match that semantically per the Protocol.
         async with self._client() as client:
-            # S3 ``DeleteObject`` is idempotent and returns 204 even when
-            # the key doesn't exist. Probe with ``head_object`` first so
-            # callers that want missing-key signalling get it via
-            # :class:`ObjectNotFoundError`; the TTL purge wraps + ignores.
-            try:
-                await client.head_object(Bucket=self._bucket, Key=key)
-            except client.exceptions.ClientError as exc:
-                if _is_not_found(exc):
-                    raise ObjectNotFoundError(key) from exc
-                raise StorageError(f"delete probe failed for key={key!r}: {exc!r}") from exc
             try:
                 await client.delete_object(Bucket=self._bucket, Key=key)
             except Exception as exc:  # noqa: BLE001
