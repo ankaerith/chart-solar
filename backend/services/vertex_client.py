@@ -105,9 +105,9 @@ def default_region_for_country(country: str) -> Region:
 def _build_default_client(*, location: Region) -> Any:
     """Construct the live ``google.genai.Client`` against Vertex.
 
-    Lazy-imported so test runs that swap in a stub don't pay the
-    google-genai startup cost. Pulling all the args from settings keeps
-    the wrapper's ``__init__`` short.
+    The only client-construction call site in the module — Vertex
+    routing (vs the AI Studio surface at generativelanguage.googleapis.com)
+    is enforced here at the source rather than via runtime introspection.
     """
     from google import genai  # noqa: PLC0415
 
@@ -130,9 +130,8 @@ class VertexClient:
         region: Region | None = None,
         client_factory: Callable[..., Any] | None = None,
     ) -> None:
-        # ZDR is hard-required. If either flag is off in this environment
-        # we abort at construction time so a misconfigured deploy can't
-        # send PDFs to a non-ZDR project.
+        # ZDR is hard-required: a misconfigured deploy must not send
+        # PDFs to a non-ZDR project.
         if not settings.vertex_zdr_enabled:
             raise VertexConfigurationError(
                 "VERTEX_ZDR_ENABLED is false; ZDR is mandatory for proposal extraction "
@@ -147,33 +146,10 @@ class VertexClient:
         self._region: Region = region or _coerce_region(settings.vertex_location)
         self._client_factory = client_factory or _build_default_client
         self._client = self._client_factory(location=self._region)
-        self._validate_client_uses_vertex(self._client)
 
     @property
     def region(self) -> Region:
         return self._region
-
-    @staticmethod
-    def _validate_client_uses_vertex(client: Any) -> None:
-        """Defence-in-depth: reject a client that's pointed at AI Studio.
-
-        ``google.genai.Client`` carries a ``vertexai`` flag on its
-        internal config; mocked test clients just need to expose either
-        that flag or a ``_api_client.vertexai`` attribute. If neither is
-        present we trust the caller.
-        """
-        candidates: list[Any] = []
-        for attr in ("vertexai", "_api_client"):
-            obj = getattr(client, attr, None)
-            if obj is not None:
-                candidates.append(obj)
-        for candidate in candidates:
-            vertex_flag = getattr(candidate, "vertexai", None)
-            if vertex_flag is False:
-                raise VertexConfigurationError(
-                    "google.genai.Client is configured for AI Studio "
-                    "(generativelanguage.googleapis.com); ZDR requires Vertex routing."
-                )
 
     async def extract(
         self,
@@ -222,8 +198,7 @@ class VertexClient:
             config_kwargs["system_instruction"] = system_prompt
 
         try:
-            response = await _generate_content(
-                client,
+            response = await client.aio.models.generate_content(
                 model=_MODEL_BY_TIER[model_tier],
                 contents=[part],
                 config=types.GenerateContentConfig(**config_kwargs),
@@ -238,7 +213,9 @@ class VertexClient:
             )
             raise VertexExtractionError(f"vertex extract failed: {exc!r}") from exc
 
-        payload = _response_text(response)
+        payload = response.text
+        if not isinstance(payload, str) or not payload:
+            raise VertexExtractionError("vertex response carried no text payload")
         try:
             return schema.model_validate_json(payload)
         except Exception as exc:  # noqa: BLE001
@@ -247,67 +224,17 @@ class VertexClient:
             ) from exc
 
 
-async def _generate_content(
-    client: Any,
-    *,
-    model: str,
-    contents: list[Any],
-    config: Any,
-) -> Any:
-    """Call ``client.models.generate_content`` with a sync/async fallback.
-
-    The live SDK exposes both ``aio.models.generate_content`` (true
-    async) and a sync ``models.generate_content``. Tests sometimes mock
-    only one; this helper tries the async path first and falls back so
-    the wrapper is mock-friendly under either shape.
-    """
-    aio = getattr(client, "aio", None)
-    if aio is not None and hasattr(aio, "models"):
-        return await aio.models.generate_content(
-            model=model,
-            contents=contents,
-            config=config,
-        )
-    return client.models.generate_content(
-        model=model,
-        contents=contents,
-        config=config,
-    )
-
-
-def _response_text(response: Any) -> str:
-    """Pull the JSON payload out of a ``GenerateContentResponse``.
-
-    The SDK exposes ``response.text`` on the happy path; some test
-    stubs only set ``candidates[0].content.parts[0].text`` directly, so
-    we walk both shapes.
-    """
-    text = getattr(response, "text", None)
-    if isinstance(text, str) and text:
-        return text
-    candidates = getattr(response, "candidates", None) or []
-    for candidate in candidates:
-        content = getattr(candidate, "content", None)
-        parts = getattr(content, "parts", None) or []
-        for part in parts:
-            value = getattr(part, "text", None)
-            if isinstance(value, str) and value:
-                return value
-    raise VertexExtractionError("vertex response carried no text payload")
+_ALLOWED_REGIONS: frozenset[Region] = frozenset(("us-central1", "us-east4", "europe-west2"))
 
 
 def _coerce_region(value: str) -> Region:
     """Settings store the region as a free-form string; narrow it here."""
-    if value not in _MODEL_BY_TIER and value not in {
-        "us-central1",
-        "us-east4",
-        "europe-west2",
-    }:
+    if value not in _ALLOWED_REGIONS:
         raise VertexConfigurationError(
             f"vertex region {value!r} is not in the allow-list "
-            "(us-central1, us-east4, europe-west2)"
+            f"({', '.join(sorted(_ALLOWED_REGIONS))})"
         )
-    return value  # type: ignore[return-value]
+    return value
 
 
 __all__ = [

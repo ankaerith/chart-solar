@@ -81,24 +81,13 @@ class _StubAio:
 
 
 @dataclass
-class _StubApiClient:
-    """Mirrors the ``vertexai`` flag the real SDK exposes."""
-
-    vertexai: bool = True
-
-
-@dataclass
 class _StubClient:
     location: str
     aio: _StubAio = field(default_factory=lambda: _StubAio(_StubModels()))
-    _api_client: _StubApiClient = field(default_factory=_StubApiClient)
 
 
-def _factory(location: str, *, ai_studio: bool = False) -> _StubClient:
-    return _StubClient(
-        location=location,
-        _api_client=_StubApiClient(vertexai=not ai_studio),
-    )
+def _factory(location: str) -> _StubClient:
+    return _StubClient(location=location)
 
 
 # ---------------------------------------------------------------------------
@@ -128,15 +117,6 @@ def test_constructor_refuses_when_abuse_logging_exemption_off(
 
     with pytest.raises(VertexConfigurationError, match="ABUSE_LOGGING"):
         VertexClient(client_factory=lambda location: _factory(location))
-
-
-def test_constructor_rejects_ai_studio_routed_client(zdr_settings: None) -> None:
-    """If a caller hands us a client built with ``vertexai=False`` we
-    must abort — that surface points at generativelanguage.googleapis.com."""
-    with pytest.raises(VertexConfigurationError, match="AI Studio"):
-        VertexClient(
-            client_factory=lambda location: _factory(location, ai_studio=True),
-        )
 
 
 def test_constructor_pins_default_region_to_us_central1(zdr_settings: None) -> None:
@@ -285,26 +265,10 @@ async def test_extract_rejects_response_that_does_not_match_schema(
         await client.extract(pdf_bytes=b"%PDF", schema=TinyExtraction)
 
 
-async def test_extract_falls_back_to_sync_models_when_aio_absent(
-    zdr_settings: None,
-) -> None:
-    """A test mock that only exposes the sync path still works."""
-
-    @dataclass
-    class _SyncStub:
-        location: str
-        models: _StubModels = field(default_factory=_StubModels)
-        _api_client: _StubApiClient = field(default_factory=_StubApiClient)
-
-    stub = _SyncStub(location="us-central1")
-    # ``generate_content`` on the sync surface needs to be sync, not async,
-    # to mirror the live SDK; awaiting a sync return is the wrapper's job.
-
-    def sync_generate(**kwargs: Any) -> _StubResponse:
-        return _StubResponse('{"panel_count": 12, "confidence": 0.5}')
-
-    stub.models.generate_content = sync_generate  # type: ignore[assignment]
-
+async def test_extract_rejects_response_with_no_text(zdr_settings: None) -> None:
+    stub = _StubClient(location="us-central1")
+    stub.aio.models.response_text = ""
     client = VertexClient(client_factory=lambda location: stub)
-    result = await client.extract(pdf_bytes=b"%PDF", schema=TinyExtraction)
-    assert result.panel_count == 12
+
+    with pytest.raises(VertexExtractionError, match="no text payload"):
+        await client.extract(pdf_bytes=b"%PDF", schema=TinyExtraction)
