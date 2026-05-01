@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import entitlements, forecast, health, irradiance, stripe_webhook
+from backend.api import audits, entitlements, forecast, health, irradiance, me, stripe_webhook
 from backend.config import settings
 from backend.infra.logging import configure_logging
 from backend.infra.middleware import CorrelationIdMiddleware
@@ -41,3 +41,5 @@ app.include_router(forecast.router, prefix="/api")
 app.include_router(irradiance.router, prefix="/api")
 app.include_router(entitlements.router, prefix="/api")
 app.include_router(stripe_webhook.router, prefix="/api")
+app.include_router(audits.router, prefix="/api")
+app.include_router(me.router, prefix="/api")
