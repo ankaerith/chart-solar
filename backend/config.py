@@ -66,9 +66,19 @@ class Settings(BaseSettings):
     # Sentry
     sentry_dsn: str | None = None
 
-    # Auth (FastAPI-native magic-link JWT path)
+    # Auth (FastAPI-native magic-link path).
+    # ``auth_jwt_secret`` is reserved for a future JWT-based session
+    # variant; the default magic-link flow uses a Postgres-backed session
+    # token and doesn't need a signing secret.
     auth_jwt_secret: str | None = None
-    auth_magic_link_ttl_seconds: int = 900
+    auth_magic_link_ttl_seconds: int = 900  # 15 min — non-negotiable per chart-solar-ij9
+    auth_session_ttl_seconds: int = 60 * 60 * 24 * 30  # 30 days
+    auth_session_cookie_name: str = "chart_solar_session"
+    auth_session_cookie_secure: bool = True
+    # Where the magic-link click lands. Front end captures the ``token``
+    # query string and POSTs it back to ``GET /api/auth/callback`` via
+    # ``window.location``; the cookie is set on that response.
+    auth_callback_url: str = "http://localhost:3000/auth/callback"
 
 
 settings = Settings()
