@@ -389,3 +389,61 @@ def test_pipeline_artifacts_only_carry_step_outputs() -> None:
     # The step outputs themselves still land where the public contract says.
     assert "engine.tariff" in result.artifacts
     assert "engine.export_credit" in result.artifacts
+
+
+def test_pipeline_writes_a_snapshot_artifact_with_tariff_and_inputs_hashes() -> None:
+    """Every forecast carries an `engine.snapshot` pin so a saved run
+    can prove what produced it. Hashes must be 64-hex (sha256), the
+    irradiance source + fetched_at must mirror the TMY, and the engine
+    + pvlib version pins must be set."""
+    from backend.engine.snapshot import (
+        Snapshot,
+        current_engine_version,
+        current_pvlib_version,
+    )
+
+    schedule = _flat_tariff()
+    inputs = _baseline_inputs(schedule=schedule)
+    tmy = synthetic_tmy(lat=inputs.system.lat, lon=inputs.system.lon)
+
+    result = run_forecast(inputs, tmy=tmy)
+
+    snapshot = result.artifacts["engine.snapshot"]
+    assert isinstance(snapshot, Snapshot)
+    assert snapshot.engine_version == current_engine_version()
+    assert snapshot.pvlib_version == current_pvlib_version()
+    assert snapshot.irradiance_source == tmy.source
+    assert snapshot.irradiance_fetched_at == tmy.fetched_at
+    assert len(snapshot.tariff_hash) == 64
+    assert len(snapshot.inputs_hash) == 64
+
+
+def test_pipeline_snapshot_hashes_are_stable_across_runs_with_identical_inputs() -> None:
+    """Same inputs + same tariff → same hashes across two pipeline
+    invocations. This is the property the snapshot pin needs so a
+    re-open can short-circuit the pipeline and serve the cached result."""
+    schedule = _flat_tariff()
+    inputs = _baseline_inputs(schedule=schedule)
+    tmy = synthetic_tmy(lat=inputs.system.lat, lon=inputs.system.lon)
+
+    a = run_forecast(inputs, tmy=tmy)
+    b = run_forecast(inputs, tmy=tmy)
+
+    assert a.artifacts["engine.snapshot"].matches(b.artifacts["engine.snapshot"])
+    assert a.artifacts["engine.snapshot"].tariff_hash == b.artifacts["engine.snapshot"].tariff_hash
+    assert a.artifacts["engine.snapshot"].inputs_hash == b.artifacts["engine.snapshot"].inputs_hash
+
+
+def test_pipeline_snapshot_tariff_hash_changes_when_tariff_changes() -> None:
+    """Same inputs but a different tariff → tariff_hash differs;
+    inputs_hash also differs because the schedule sits inside inputs.
+    Together that surfaces 'tariff changed since you saved this' diff
+    (the headline scenario from chart-solar-you)."""
+    a_inputs = _baseline_inputs(schedule=_flat_tariff(rate=0.16))
+    b_inputs = _baseline_inputs(schedule=_flat_tariff(rate=0.21))
+    tmy = synthetic_tmy(lat=a_inputs.system.lat, lon=a_inputs.system.lon)
+
+    a = run_forecast(a_inputs, tmy=tmy)
+    b = run_forecast(b_inputs, tmy=tmy)
+
+    assert a.artifacts["engine.snapshot"].tariff_hash != b.artifacts["engine.snapshot"].tariff_hash
