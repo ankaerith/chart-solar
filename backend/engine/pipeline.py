@@ -28,6 +28,7 @@ from typing import Any
 from backend.engine.inputs import ConsumptionInputs, ForecastInputs
 from backend.engine.registry import StepFn, steps_for
 from backend.engine.snapshot import build_snapshot
+from backend.engine.steps.battery_dispatch import BatteryDispatchResult
 from backend.engine.steps.dc_production import DcProductionResult
 from backend.providers.irradiance import HOURS_PER_TMY, TmyData
 
@@ -146,7 +147,7 @@ def _net_load(state: ForecastState) -> list[float]:
     against what actually hits the meter. Pre-battery shape — pure
     ``consumption − production`` — when no battery dispatch ran.
     """
-    battery = state.artifacts.get("engine.battery_dispatch")
+    battery: BatteryDispatchResult | None = state.artifacts.get("engine.battery_dispatch")
     if battery is not None:
         return [
             imp - exp
