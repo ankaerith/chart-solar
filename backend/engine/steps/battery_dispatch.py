@@ -216,6 +216,11 @@ def _build_peak_mask(periods: list[TouPeriod]) -> list[bool]:
     maximum. Hours with no matching period (rare; tariff-authoring
     bug) default to off-peak so dispatch degrades to "store solar
     surplus" rather than crash.
+
+    Memoises across the 8760 hours: only 12 × 2 × 24 = 576 distinct
+    ``(month, is_weekday, hour_of_day)`` cells exist, so a Monte
+    Carlo wrapper that calls ``dispatch_battery`` thousands of times
+    avoids 8760 × periods scans on every path.
     """
     if not periods:
         return [False] * HOURS_PER_TMY
@@ -223,19 +228,21 @@ def _build_peak_mask(periods: list[TouPeriod]) -> list[bool]:
     if math.isclose(peak_rate, 0.0):
         return [False] * HOURS_PER_TMY
 
-    calendar = tmy_hour_calendar()
+    cell_cache: dict[tuple[int, bool, int], bool] = {}
     mask: list[bool] = []
-    for month, is_weekday, hour_of_day in calendar:
-        match = first_matching_tou_period(
-            periods,
-            month=month,
-            is_weekday=is_weekday,
-            hour_of_day=hour_of_day,
-        )
-        if match is None:
-            mask.append(False)
-            continue
-        mask.append(math.isclose(match.rate_per_kwh, peak_rate))
+    for month, is_weekday, hour_of_day in tmy_hour_calendar():
+        cell = (month, is_weekday, hour_of_day)
+        cached = cell_cache.get(cell)
+        if cached is None:
+            match = first_matching_tou_period(
+                periods,
+                month=month,
+                is_weekday=is_weekday,
+                hour_of_day=hour_of_day,
+            )
+            cached = match is not None and math.isclose(match.rate_per_kwh, peak_rate)
+            cell_cache[cell] = cached
+        mask.append(cached)
     return mask
 
 
