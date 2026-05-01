@@ -32,10 +32,7 @@ from backend.services.entitlements_grants import (
     revoke_by_event,
     tier_for_user,
 )
-from backend.services.entitlements_subscribers import (
-    register_subscribers,
-    reset_for_tests,
-)
+from backend.services.entitlements_subscribers import register_subscribers
 from backend.services.stripe_webhook_router import route_event
 
 WEBHOOK_SECRET = "whsec_test_dummy_secret"  # noqa: S105 — test-only fixture
@@ -50,10 +47,8 @@ WEBHOOK_SECRET = "whsec_test_dummy_secret"  # noqa: S105 — test-only fixture
 def _isolate_eventbus() -> Iterator[None]:
     """Strip subscribers before/after each test so registrations don't leak."""
     clear_subscribers()
-    reset_for_tests()
     yield
     clear_subscribers()
-    reset_for_tests()
 
 
 @pytest.fixture(autouse=True)

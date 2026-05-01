@@ -34,7 +34,7 @@ from typing import Any
 
 from backend.config import require, settings
 from backend.domain.events import PaymentRefunded, PaymentSucceeded
-from backend.entitlements.features import Tier
+from backend.entitlements.features import Tier, try_parse_tier
 from backend.infra.logging import get_logger
 
 _log = get_logger(__name__)
@@ -139,7 +139,9 @@ def _extract_user_and_tier(event_type: str, obj: dict[str, Any]) -> tuple[str | 
     metadata = (obj.get("metadata") or {}) if isinstance(obj.get("metadata"), dict) else {}
 
     raw_tier = metadata.get("tier")
-    tier = _coerce_tier(raw_tier) if isinstance(raw_tier, str) else None
+    tier = try_parse_tier(raw_tier) if isinstance(raw_tier, str) else None
+    if tier is None and isinstance(raw_tier, str):
+        _log.warning("stripe.unknown_tier", raw=raw_tier)
 
     if event_type == "checkout.session.completed":
         user_id = obj.get("client_reference_id") or metadata.get("user_id")
@@ -147,14 +149,6 @@ def _extract_user_and_tier(event_type: str, obj: dict[str, Any]) -> tuple[str | 
         user_id = metadata.get("user_id")
 
     return (user_id if isinstance(user_id, str) and user_id else None, tier)
-
-
-def _coerce_tier(value: str) -> Tier | None:
-    try:
-        return Tier(value)
-    except ValueError:
-        _log.warning("stripe.unknown_tier", raw=value)
-        return None
 
 
 __all__ = [

@@ -17,8 +17,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import desc, select
+from sqlalchemy import case, desc, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.entitlement_models import UserEntitlement
@@ -80,14 +81,14 @@ async def revoke_by_event(
 ) -> bool:
     """Mark the most-recent matching active grant as revoked.
 
-    Two events can refund the same grant — Stripe will re-deliver — so
-    we dedupe on ``revoked_by_event_id`` (unique). If no active grant
-    exists (already revoked or never existed), returns False without
-    raising; the webhook still 200s and the operator inspects the log.
+    The unique constraint on ``revoked_by_event_id`` is the replay
+    guard — a re-delivered refund event raises ``IntegrityError`` on
+    commit, which we catch and translate to ``False``. No active grant
+    matching (user, tier) also returns ``False``; the webhook still
+    200s and the operator inspects the log.
     """
-    # Newest active grant matching (user, tier).
-    stmt = (
-        select(UserEntitlement)
+    candidate_id = (
+        select(UserEntitlement.id)
         .where(
             UserEntitlement.user_id == user_id,
             UserEntitlement.tier == tier.value,
@@ -95,23 +96,23 @@ async def revoke_by_event(
         )
         .order_by(desc(UserEntitlement.granted_at))
         .limit(1)
+        .scalar_subquery()
     )
-    result = await session.execute(stmt)
-    row = result.scalar_one_or_none()
-    if row is None:
-        _log.warning(
-            "entitlements.revoke_no_active_grant",
-            user_id=user_id,
-            tier=tier.value,
-            event_id=revoked_by_event_id,
+    stmt = (
+        update(UserEntitlement)
+        .where(UserEntitlement.id == candidate_id)
+        .values(
+            revoked_at=datetime.now(UTC),
+            revoked_by_event_id=revoked_by_event_id,
         )
-        return False
-
-    # Replay guard: if a refund row already references this event, skip.
-    replay_stmt = select(UserEntitlement).where(
-        UserEntitlement.revoked_by_event_id == revoked_by_event_id
+        .returning(UserEntitlement.id)
     )
-    if (await session.execute(replay_stmt)).scalar_one_or_none() is not None:
+    try:
+        result = await session.execute(stmt)
+        await session.commit()
+    except IntegrityError:
+        # Unique on revoked_by_event_id tripped — replay.
+        await session.rollback()
         _log.info(
             "entitlements.revoke_replay_dropped",
             user_id=user_id,
@@ -120,9 +121,14 @@ async def revoke_by_event(
         )
         return False
 
-    row.revoked_at = datetime.now(UTC)
-    row.revoked_by_event_id = revoked_by_event_id
-    await session.commit()
+    if result.scalar_one_or_none() is None:
+        _log.warning(
+            "entitlements.revoke_no_active_grant",
+            user_id=user_id,
+            tier=tier.value,
+            event_id=revoked_by_event_id,
+        )
+        return False
     _log.info(
         "entitlements.tier_revoked",
         user_id=user_id,
@@ -132,34 +138,37 @@ async def revoke_by_event(
     return True
 
 
+_TIER_RANK_CASE = case(
+    {member.value: TIER_RANK[member] for member in TIER_RANK},
+    value=UserEntitlement.tier,
+    else_=-1,
+)
+
+
 async def tier_for_user(session: AsyncSession, user_id: str) -> Tier:
     """Effective tier for ``user_id`` — highest active grant, or FREE.
 
-    Returns ``Tier.FREE`` for a user with no rows or only-revoked rows;
-    callers don't need to special-case absence.
+    Returns ``Tier.FREE`` for a user with no rows or only-revoked rows.
+    Ranking happens in SQL; the ``else_=-1`` clause sorts unrecognised
+    tier strings (e.g. a column value renamed since this row was
+    written) below every known tier so a stale row can't win.
     """
-    stmt = select(UserEntitlement.tier).where(
-        UserEntitlement.user_id == user_id,
-        UserEntitlement.revoked_at.is_(None),
+    raw = await session.scalar(
+        select(UserEntitlement.tier)
+        .where(
+            UserEntitlement.user_id == user_id,
+            UserEntitlement.revoked_at.is_(None),
+        )
+        .order_by(_TIER_RANK_CASE.desc())
+        .limit(1)
     )
-    rows = (await session.execute(stmt)).scalars().all()
-    if not rows:
+    if raw is None:
         return Tier.FREE
-    best = Tier.FREE
-    best_rank = TIER_RANK[Tier.FREE]
-    for raw in rows:
-        try:
-            tier = Tier(raw)
-        except ValueError:
-            # Stale row referencing a tier we've since renamed; skip
-            # rather than crash the lookup.
-            _log.warning("entitlements.unknown_tier_in_row", user_id=user_id, raw=raw)
-            continue
-        rank = TIER_RANK[tier]
-        if rank > best_rank:
-            best = tier
-            best_rank = rank
-    return best
+    try:
+        return Tier(raw)
+    except ValueError:
+        _log.warning("entitlements.unknown_tier_in_row", user_id=user_id, raw=raw)
+        return Tier.FREE
 
 
 __all__ = ["grant_tier", "revoke_by_event", "tier_for_user"]
