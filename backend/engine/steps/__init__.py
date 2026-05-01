@@ -18,8 +18,10 @@ Modules in this package fall into three groups:
   permanently stubbed: pvlib's ModelChain handles them inside
   ``dc_production`` (ADR 0006).
 * **Phase-1a in-flight**: ``consumption``, ``battery_dispatch``,
-  ``finance``, ``monte_carlo``, ``irradiance`` — implementations
-  arrive as their respective beads close.
+  ``finance``, ``monte_carlo`` — implementations arrive as their
+  respective beads close. The TMY fetch is the worker's responsibility
+  (network IO, async); the engine consumes pre-fetched ``TmyData``
+  via ``backend.domain.tmy`` and never has its own irradiance step.
 """
 
 from backend.engine.steps import (
@@ -30,7 +32,6 @@ from backend.engine.steps import (
     degradation,
     export_credit,
     finance,
-    irradiance,
     monte_carlo,
     snow,
     soiling,
@@ -47,7 +48,6 @@ __all__ = [
     "degradation",
     "export_credit",
     "finance",
-    "irradiance",
     "monte_carlo",
     "snow",
     "soiling",

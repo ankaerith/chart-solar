@@ -26,14 +26,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from backend.engine.registry import register
-from backend.providers.irradiance import HOURS_PER_TMY, tmy_hour_calendar
-from backend.providers.tariff import (
+from backend.domain.tariff import (
     CurrencyCode,
     TariffSchedule,
     TieredBlock,
     first_matching_tou_period,
 )
+from backend.domain.tmy import HOURS_PER_TMY, tmy_hour_calendar
+from backend.engine.registry import register
 
 _TMY_CALENDAR = tmy_hour_calendar()
 

@@ -21,9 +21,9 @@ from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from backend.domain.tariff import TariffSchedule
+from backend.domain.tmy import HOURS_PER_TMY
 from backend.engine.types import ExportRegime
-from backend.providers.irradiance import HOURS_PER_TMY
-from backend.providers.tariff import TariffSchedule
 
 if TYPE_CHECKING:
     from backend.engine.steps.export_credit import ExportCreditResult

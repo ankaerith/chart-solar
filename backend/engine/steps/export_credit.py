@@ -31,6 +31,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from backend.domain.tariff import TariffSchedule, first_matching_tou_period
+from backend.domain.tmy import HOURS_PER_TMY, tmy_hour_calendar
 from backend.engine.inputs import (
     ExportCreditConfig,
     NbtConfig,
@@ -41,8 +43,6 @@ from backend.engine.inputs import (
 from backend.engine.registry import register
 from backend.engine.steps.tariff import sort_tiered_blocks, walk_tier_charge
 from backend.engine.types import ExportRegime
-from backend.providers.irradiance import HOURS_PER_TMY, tmy_hour_calendar
-from backend.providers.tariff import TariffSchedule, first_matching_tou_period
 
 _TMY_CALENDAR = tmy_hour_calendar()
 
