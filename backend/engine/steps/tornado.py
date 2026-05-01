@@ -19,11 +19,12 @@ a stochastic distribution to surface as sensitivities.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
+from backend.engine.inputs import ExportCreditConfig, FinancialInputs
 from backend.engine.steps.dc_production import DcProductionResult
 from backend.engine.steps.degradation import (
     DEFAULT_ANNUAL_LOSS,
@@ -32,6 +33,7 @@ from backend.engine.steps.degradation import (
 )
 from backend.engine.steps.finance import run_finance
 from backend.engine.steps.monte_carlo import _scaled_dc
+from backend.providers.tariff import TariffSchedule
 
 if TYPE_CHECKING:
     from backend.engine.pipeline import ForecastState
@@ -129,24 +131,23 @@ def run_tornado(
         raise ValueError("tornado requires engine.consumption in state.artifacts")
 
     sensitivity = sensitivity or TornadoSensitivity()
-    baseline_npv = _evaluate_npv(
-        _AxisInputs(
-            financial=inputs.financial,
-            consumption=consumption,
-            dc=dc,
-            schedule=inputs.tariff.schedule,
-            export_credit=inputs.tariff.export_credit,
-            annual_loss=DEFAULT_ANNUAL_LOSS,
-            hold_years=inputs.financial.hold_years,
-        )
+    baseline = _AxisInputs(
+        financial=inputs.financial,
+        consumption=consumption,
+        dc=dc,
+        schedule=inputs.tariff.schedule,
+        export_credit=inputs.tariff.export_credit,
+        annual_loss=DEFAULT_ANNUAL_LOSS,
+        hold_years=inputs.financial.hold_years,
     )
+    baseline_npv = _evaluate_npv(baseline)
 
     rows: list[TornadoAxis] = []
     for axis in _AXES:
         if not axis.applicable(sensitivity):
             continue
-        low_inputs = axis.perturb(_baseline_axis_inputs(state), sensitivity, sign=-1)
-        high_inputs = axis.perturb(_baseline_axis_inputs(state), sensitivity, sign=+1)
+        low_inputs = axis.perturb(replace(baseline), sensitivity, sign=-1)
+        high_inputs = axis.perturb(replace(baseline), sensitivity, sign=+1)
         rows.append(
             TornadoAxis(
                 name=axis.name,
@@ -167,36 +168,22 @@ def run_tornado(
 
 @dataclass
 class _AxisInputs:
-    """Mutable bundle of finance-step arguments threaded through one axis.
+    """Bundle of finance-step arguments threaded through one axis.
 
-    Held as a dataclass rather than re-using ``ForecastInputs`` /
-    ``ForecastState`` because the Pydantic models are immutable by
-    convention and we want a cheap per-axis copy (every axis's
-    ``perturb`` produces a fresh ``_AxisInputs`` and the original is
-    discarded). ``annual_loss`` shadows the degradation-curve
-    parameter so the curve can be rebuilt per axis without rebuilding
-    the whole forecast.
+    A dataclass — not the Pydantic ``ForecastInputs`` — so each axis's
+    ``perturb`` can replace one field with the trivial cost of a
+    ``dataclasses.replace`` call. ``annual_loss`` rides alongside so
+    the degradation curve can be rebuilt per axis without rebuilding
+    the rest of the forecast.
     """
 
-    financial: object  # FinancialInputs but typed-loose to avoid import cycle here
+    financial: FinancialInputs
     consumption: list[float]
     dc: DcProductionResult
-    schedule: object  # TariffSchedule
-    export_credit: object | None
+    schedule: TariffSchedule
+    export_credit: ExportCreditConfig | None
     annual_loss: float
     hold_years: int
-
-
-def _baseline_axis_inputs(state: ForecastState) -> _AxisInputs:
-    return _AxisInputs(
-        financial=state.inputs.financial,
-        consumption=state.artifacts["engine.consumption"],
-        dc=state.artifacts["engine.dc_production"],
-        schedule=state.inputs.tariff.schedule,
-        export_credit=state.inputs.tariff.export_credit,
-        annual_loss=DEFAULT_ANNUAL_LOSS,
-        hold_years=state.inputs.financial.hold_years,
-    )
 
 
 def _evaluate_npv(axis: _AxisInputs) -> float:
@@ -205,17 +192,13 @@ def _evaluate_npv(axis: _AxisInputs) -> float:
         first_year_loss=DEFAULT_FIRST_YEAR_LOSS,
         annual_loss=axis.annual_loss,
     )
-    # Cast back into the typed call: run_finance expects the
-    # FinancialInputs Pydantic model. The typed-loose `object` carrier
-    # in _AxisInputs is just plumbing; the actual runtime value is a
-    # FinancialInputs with the per-axis override already applied.
     result = run_finance(
-        financial=axis.financial,  # type: ignore[arg-type]
+        financial=axis.financial,
         consumption=axis.consumption,
         dc=axis.dc,
         degradation=curve,
-        schedule=axis.schedule,  # type: ignore[arg-type]
-        export_credit=axis.export_credit,  # type: ignore[arg-type]
+        schedule=axis.schedule,
+        export_credit=axis.export_credit,
     )
     return result.npv
 
@@ -263,19 +246,14 @@ class _WeatherAxis(_Axis):
 @dataclass(frozen=True)
 class _RateEscalationAxis(_Axis):
     def perturb(self, axis: _AxisInputs, s: TornadoSensitivity, *, sign: int) -> _AxisInputs:
-        from backend.engine.inputs import FinancialInputs
-
-        baseline: FinancialInputs = axis.financial  # type: ignore[assignment]
-        new_rate = baseline.rate_escalation + sign * s.rate_escalation_delta
-        axis.financial = baseline.model_copy(update={"rate_escalation": new_rate})
+        new_rate = axis.financial.rate_escalation + sign * s.rate_escalation_delta
+        axis.financial = axis.financial.model_copy(update={"rate_escalation": new_rate})
         return axis
 
 
 @dataclass(frozen=True)
 class _AnnualLossAxis(_Axis):
     def perturb(self, axis: _AxisInputs, s: TornadoSensitivity, *, sign: int) -> _AxisInputs:
-        # Higher degradation = lower NPV → invert sign so the "high"
-        # label still reads as more-degradation
         axis.annual_loss = max(0.0, axis.annual_loss + sign * s.annual_loss_delta)
         return axis
 
@@ -283,11 +261,8 @@ class _AnnualLossAxis(_Axis):
 @dataclass(frozen=True)
 class _HoldYearsAxis(_Axis):
     def perturb(self, axis: _AxisInputs, s: TornadoSensitivity, *, sign: int) -> _AxisInputs:
-        from backend.engine.inputs import FinancialInputs
-
-        baseline: FinancialInputs = axis.financial  # type: ignore[assignment]
-        new_hold = max(1, baseline.hold_years + sign * s.hold_years_delta)
-        axis.financial = baseline.model_copy(update={"hold_years": new_hold})
+        new_hold = max(1, axis.financial.hold_years + sign * s.hold_years_delta)
+        axis.financial = axis.financial.model_copy(update={"hold_years": new_hold})
         axis.hold_years = new_hold
         return axis
 
@@ -295,23 +270,17 @@ class _HoldYearsAxis(_Axis):
 @dataclass(frozen=True)
 class _SystemCostAxis(_Axis):
     def perturb(self, axis: _AxisInputs, s: TornadoSensitivity, *, sign: int) -> _AxisInputs:
-        from backend.engine.inputs import FinancialInputs
-
-        baseline: FinancialInputs = axis.financial  # type: ignore[assignment]
-        assert baseline.system_cost is not None
-        new_cost = baseline.system_cost * (1.0 + sign * s.system_cost_delta_pct)
-        axis.financial = baseline.model_copy(update={"system_cost": new_cost})
+        assert axis.financial.system_cost is not None
+        new_cost = axis.financial.system_cost * (1.0 + sign * s.system_cost_delta_pct)
+        axis.financial = axis.financial.model_copy(update={"system_cost": new_cost})
         return axis
 
 
 @dataclass(frozen=True)
 class _DiscountRateAxis(_Axis):
     def perturb(self, axis: _AxisInputs, s: TornadoSensitivity, *, sign: int) -> _AxisInputs:
-        from backend.engine.inputs import FinancialInputs
-
-        baseline: FinancialInputs = axis.financial  # type: ignore[assignment]
-        new_rate = max(0.0, baseline.discount_rate + sign * s.discount_rate_delta)
-        axis.financial = baseline.model_copy(update={"discount_rate": new_rate})
+        new_rate = max(0.0, axis.financial.discount_rate + sign * s.discount_rate_delta)
+        axis.financial = axis.financial.model_copy(update={"discount_rate": new_rate})
         return axis
 
 
