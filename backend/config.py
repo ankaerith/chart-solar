@@ -32,10 +32,21 @@ class Settings(BaseSettings):
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
 
-    # Vertex AI (PDF extraction)
+    # PDF retention. The Phase 1 closed decision is 24-72h; default 72
+    # so users have time to fix mis-uploads before the TTL purge runs.
+    # Lower it via env in stricter privacy environments.
+    pdf_storage_ttl_hours: int = 72
+
+    # Vertex AI (PDF extraction). ZDR is non-negotiable for production —
+    # the client wrapper refuses to start unless both flags are true. The
+    # abuse-logging exemption requires GCP-side enrollment per
+    # ``LEGAL_CONSIDERATIONS.md § G1b``; the flag here only attests that
+    # the project-level setting has been requested + granted.
     vertex_project_id: str | None = None
     vertex_location: str = "us-central1"
     vertex_credentials_json: str | None = None
+    vertex_zdr_enabled: bool = False
+    vertex_abuse_logging_exempt: bool = False
 
     # Stripe
     stripe_secret_key: str | None = None

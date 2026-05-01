@@ -62,3 +62,11 @@ def feature_required_tier(feature_key: str) -> Tier:
 def tier_satisfies(user: Tier, required: Tier) -> bool:
     """Does the user's tier rank meet or exceed the required tier?"""
     return TIER_RANK[user] >= TIER_RANK[required]
+
+
+def try_parse_tier(raw: str) -> Tier | None:
+    """Coerce a raw string to a ``Tier``, returning ``None`` on miss."""
+    try:
+        return Tier(raw)
+    except ValueError:
+        return None
