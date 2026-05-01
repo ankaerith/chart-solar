@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 
 from backend.infra.http import make_get
 from backend.providers.irradiance import HOURS_PER_TMY, IrradianceSource, TmyData
+from backend.providers.irradiance._aggregation import aggregate_hourly_to_monthly_mean
 
 NSRDB_PSM3_URL = "https://developer.nrel.gov/api/nsrdb/v2/solar/psm3-tmy-download.csv"
 NSRDB_ATTRIBUTES = "ghi,dni,dhi,air_temperature,wind_speed,surface_albedo,relative_humidity"
@@ -103,7 +104,7 @@ def parse_nsrdb_csv(body: str, *, source_lat: float, source_lon: float) -> TmyDa
 
     monthly_rh: list[float] | None = None
     if rh_idx is not None and len(rh) == HOURS_PER_TMY:
-        monthly_rh = _aggregate_hourly_to_monthly_mean(rh)
+        monthly_rh = aggregate_hourly_to_monthly_mean(rh)
 
     return TmyData(
         lat=source_lat,
@@ -119,39 +120,6 @@ def parse_nsrdb_csv(body: str, *, source_lat: float, source_lon: float) -> TmyDa
         wind_speed_m_s=wind,
         relative_humidity_pct_per_month=monthly_rh,
     )
-
-
-_HOURS_PER_MONTH_NON_LEAP: tuple[int, ...] = (
-    31 * 24,
-    28 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-)
-
-
-def _aggregate_hourly_to_monthly_mean(values: list[float]) -> list[float]:
-    """Average an 8760-hour series into 12 monthly means.
-
-    Days-per-month is non-uniform; sum/count division below handles
-    that correctly. Mirrors the helper in ``openmeteo.py`` — kept local
-    here to avoid a cross-adapter import that would invert the
-    dependency direction.
-    """
-    out: list[float] = []
-    cursor = 0
-    for hours in _HOURS_PER_MONTH_NON_LEAP:
-        chunk = values[cursor : cursor + hours]
-        out.append(sum(chunk) / len(chunk))
-        cursor += hours
-    return out
 
 
 def _offset_to_iana_etc(offset_hours: float) -> str:
