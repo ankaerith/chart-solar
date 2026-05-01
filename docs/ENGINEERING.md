@@ -156,6 +156,22 @@ uv run alembic downgrade -1                   # roll back one revision
 - Models land in Phase 1 (`backend/<package>/models.py`); when they do, wire `target_metadata` in `alembic/env.py` so autogenerate sees them.
 - Phase 1 tables (audits, installer_quotes, installers, user_pii_vault, region_pricing_aggregates, installer_internal_stats — see `chart-solar-0hl`) chain off the empty baseline `c6cb527d3505`.
 
+**Stacked migrations across in-flight PRs:**
+
+When two open PRs each ship an alembic migration, only the first to merge can keep its original `down_revision`. The second PR's migration was authored against the same parent, so once the first merges there are now two heads — and the CI alembic round-trip step fails with `Multiple head revisions are present`.
+
+Resolution: the second PR rebases on `main`, then re-parents its migration onto the merged revision id. Concretely, in the second PR's migration file:
+
+```python
+# before (parent shared with the merged PR's migration)
+down_revision = "8b3e7a1c4d20"
+
+# after (the merged PR's revision)
+down_revision = "f5a3b7c2d1e8"
+```
+
+Before pushing a migration, run `uv run alembic heads` against the up-to-date main. A single head id means you're chained correctly; two means another PR merged ahead of you and you need to re-parent. The fix is one line + a force-push to the PR branch — but it's invisible if you only watch CI on your own branch, so the local check is the cheap save.
+
 ## Architecture decisions
 
 See [docs/adr/](./adr/). Anything that fits the "future reader will be surprised" test gets an ADR.
