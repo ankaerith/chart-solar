@@ -10,6 +10,7 @@ from backend.providers.fake.geocoding import FakeGeocodingProvider
 from backend.providers.fake.incentive import FakeIncentiveProvider
 from backend.providers.fake.irradiance import FakeIrradianceProvider, synthetic_tmy
 from backend.providers.fake.monitoring import FakeMonitoringProvider
+from backend.providers.fake.storage import FakeStorageProvider
 from backend.providers.fake.tariff import FakeTariffProvider
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "FakeIncentiveProvider",
     "FakeIrradianceProvider",
     "FakeMonitoringProvider",
+    "FakeStorageProvider",
     "FakeTariffProvider",
     "synthetic_tmy",
 ]
