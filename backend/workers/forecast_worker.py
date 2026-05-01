@@ -13,9 +13,17 @@ from rq import Worker, get_current_job
 
 import backend.database as _db
 from backend.db.tmy_cache import lookup_cached_tmy, store_cached_tmy
+from backend.domain.events import ForecastCompleted
 from backend.engine.inputs import ForecastInputs
 from backend.engine.pipeline import run_forecast
-from backend.infra.logging import configure_logging, get_logger, set_correlation_id
+from backend.entitlements.guards import ANONYMOUS_USER_ID
+from backend.infra.eventbus import dispatch
+from backend.infra.logging import (
+    configure_logging,
+    get_correlation_id,
+    get_logger,
+    set_correlation_id,
+)
 from backend.providers.irradiance import TmyData, pick_provider
 from backend.workers.queue import get_queue, get_redis
 
@@ -34,12 +42,25 @@ def run_forecast_job(payload: dict[str, Any]) -> dict[str, Any]:
     log.info("forecast.complete", job_id=job_id)
     # Pydantic models in artifacts need explicit JSON serialisation; RQ
     # only knows how to pickle, but downstream consumers want JSON.
-    return {
-        "artifacts": {
-            key: artifact.model_dump(mode="json") if hasattr(artifact, "model_dump") else artifact
-            for key, artifact in result.artifacts.items()
-        }
+    artifacts: dict[str, Any] = {
+        key: artifact.model_dump(mode="json") if hasattr(artifact, "model_dump") else artifact
+        for key, artifact in result.artifacts.items()
     }
+
+    # Publish so cross-cutting subscribers (regional aggregate refresh,
+    # email send, Sentry breadcrumb) can react without the worker
+    # importing them. The bus swallows subscriber failures so a buggy
+    # listener can't strand a completed forecast.
+    user_id = job.meta.get("user_id", ANONYMOUS_USER_ID) if job else ANONYMOUS_USER_ID
+    dispatch(
+        ForecastCompleted(
+            job_id=job_id or "",
+            user_id=user_id,
+            result_summary={"artifact_keys": sorted(artifacts.keys())},
+            correlation_id=get_correlation_id(),
+        )
+    )
+    return {"artifacts": artifacts}
 
 
 def _fetch_tmy(inputs: ForecastInputs) -> TmyData:
