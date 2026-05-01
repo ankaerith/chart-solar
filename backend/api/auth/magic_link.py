@@ -19,9 +19,8 @@ exercised independently of FastAPI.
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter, Cookie, HTTPException, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 
 import backend.database as _db
@@ -82,10 +81,7 @@ async def callback(token: str) -> Response:
                 detail="magic link is invalid or expired",
             ) from exc
 
-    response = Response(
-        content=_json({"user": {"id": str(user.id), "email": user.email}}),
-        media_type="application/json",
-    )
+    response = JSONResponse({"user": {"id": str(user.id), "email": user.email}})
     response.set_cookie(
         key=settings.auth_session_cookie_name,
         value=session_token,
@@ -118,11 +114,3 @@ async def logout(
         path="/",
     )
     return {"status": "signed_out"}
-
-
-def _json(payload: dict[str, Any]) -> str:
-    """Serialise the response body — kept inline because the callback
-    endpoint hand-rolls a Response so it can attach the cookie."""
-    import json
-
-    return json.dumps(payload)

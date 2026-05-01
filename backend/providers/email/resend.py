@@ -66,8 +66,7 @@ class ResendEmailProvider:
             )
         except httpx.HTTPStatusError as exc:
             raise EmailError(
-                f"resend rejected send (HTTP {exc.response.status_code}): "
-                f"{exc.response.text[:256]}"
+                f"resend rejected send (HTTP {exc.response.status_code}): {exc.response.text[:256]}"
             ) from exc
         except Exception as exc:  # noqa: BLE001 — wrap for the API layer
             raise EmailError(f"resend transport failed: {exc!r}") from exc
