@@ -16,12 +16,15 @@ be different on the new backend. The API contract stays put.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from rq.job import JobStatus
 
 from backend.workers.queue import enqueue_forecast as _enqueue_forecast
 from backend.workers.queue import get_job as _get_job
+
+#: The four-state vocabulary the API contract exposes.
+ApiStatus = Literal["queued", "running", "done", "error"]
 
 #: Map RQ's internal job states onto the four-state vocabulary the API
 #: contract exposes. ``deferred`` / ``scheduled`` / ``created`` collapse
@@ -29,7 +32,7 @@ from backend.workers.queue import get_job as _get_job
 #: is what the caller actually needs to know. ``stopped`` / ``canceled``
 #: surface as ``error`` so the UI tells the user the job won't complete;
 #: the operator who killed it has the audit trail.
-_RQ_STATUS_TO_API_STATUS: dict[JobStatus, str] = {
+_RQ_STATUS_TO_API_STATUS: dict[JobStatus, ApiStatus] = {
     JobStatus.CREATED: "queued",
     JobStatus.QUEUED: "queued",
     JobStatus.DEFERRED: "queued",
@@ -53,7 +56,7 @@ class ForecastJobView:
     """
 
     job_id: str
-    status: str
+    status: ApiStatus
     result: Any | None = None
     error: str | None = None
 

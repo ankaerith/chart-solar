@@ -1,12 +1,14 @@
 """Health-check probes — db + queue.
 
-The /api/health route assembles the response shape; the actual probe
-of "is the queue's Redis reachable?" lives here so the api layer never
-imports ``backend.workers``. Each probe swallows exceptions and
-returns a bool — health checks must not raise.
+The /api/health route assembles the response shape; the actual probes
+live here so the api layer never imports ``backend.workers``. Each
+probe swallows exceptions and returns a bool — health checks must
+not raise.
 """
 
 from __future__ import annotations
+
+import asyncio
 
 from sqlalchemy import text
 
@@ -29,19 +31,22 @@ async def database_ok() -> bool:
     return True
 
 
-def queue_ok() -> bool:
-    """Synchronous Redis ``PING`` against the queue's connection.
+async def queue_ok() -> bool:
+    """Redis ``PING`` against the queue's connection.
 
-    redis-py's PING is sync and fast; the route awaits the function as
-    a coroutine but the call itself doesn't need an event loop. Routes
-    treat ``False`` as a degraded probe; the operator reads structured
-    logs to identify the underlying connection failure.
+    redis-py's PING is synchronous, so we offload it to a thread —
+    a slow Redis (or a TCP-level hang) would otherwise stall the event
+    loop, which would in turn block every other in-flight request.
     """
-    try:
-        get_redis().ping()
-    except Exception:
-        return False
-    return True
+
+    def _ping() -> bool:
+        try:
+            get_redis().ping()
+        except Exception:
+            return False
+        return True
+
+    return await asyncio.to_thread(_ping)
 
 
 __all__ = ["database_ok", "queue_ok"]
