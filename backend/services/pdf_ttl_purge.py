@@ -29,11 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import settings
 from backend.db.audit_models import InstallerQuote
 from backend.infra.logging import get_logger
-from backend.providers.storage import (
-    ObjectNotFoundError,
-    StorageError,
-    StorageProvider,
-)
+from backend.providers.storage import StorageError, StorageProvider
 
 _log = get_logger(__name__)
 
@@ -57,25 +53,16 @@ class PurgeResult:
 def storage_key_from_url(url: str) -> str:
     """Pull the object key out of an ``s3://bucket/key`` reference.
 
-    The storage adapter persists ``s3://<bucket>/<key>`` as the
-    canonical handle (see ``backend.providers.storage.s3._object_url``);
-    everything between the bucket and the end of the string is the key.
-    A URL we don't recognise (legacy https://… style) returns the path
-    portion stripped of any leading slash so older formats still purge.
+    Inverse of ``backend.providers.storage.s3._object_url`` — every
+    URL the adapter mints uses the same scheme, so this is the only
+    shape we need to recognise.
     """
-    if url.startswith("s3://"):
-        rest = url[len("s3://") :]
-        # Drop the bucket prefix; everything after the first ``/`` is the key.
-        if "/" in rest:
-            return rest.split("/", 1)[1]
+    if not url.startswith("s3://"):
+        raise ValueError(f"unsupported storage URL scheme: {url!r}")
+    rest = url[len("s3://") :]
+    if "/" not in rest:
         return ""
-    # Legacy / pre-S3 URL — fall back to the path portion.
-    if "://" in url:
-        _, _, after_scheme = url.partition("://")
-        if "/" in after_scheme:
-            _, _, path = after_scheme.partition("/")
-            return path
-    return url.lstrip("/")
+    return rest.split("/", 1)[1]
 
 
 async def purge_expired_pdfs(
@@ -88,14 +75,15 @@ async def purge_expired_pdfs(
 ) -> PurgeResult:
     """One sweep: delete every PDF older than the cutoff, return counts.
 
-    The function commits after each successful row so a mid-sweep crash
-    leaves a half-purged set behind that the next run cleans up — at
-    no point is the ``raw_pdf_purged_at`` stamped without the storage
-    delete actually succeeding for that row.
+    Storage delete runs per-row (it must — there is no batch S3 op
+    in the Protocol), but the DB stamps are committed once at the end
+    of the batch so a 100-row sweep is one fsync, not 100. A storage
+    failure on row N is logged and that row's URL stays intact for
+    the next sweep to retry; the rest of the batch still commits.
 
     ``batch_size`` caps how many rows a single invocation processes so
     the sweep is interrupt-friendly under a scheduler that fires it
-    every few minutes; the next firing picks up where this one left off.
+    every few minutes.
     """
     cutoff_now = now or datetime.now(UTC)
     ttl = timedelta(hours=ttl_hours if ttl_hours is not None else settings.pdf_storage_ttl_hours)
@@ -119,16 +107,11 @@ async def purge_expired_pdfs(
             continue
         key = storage_key_from_url(url)
         try:
+            # Delete is idempotent in the Protocol — missing objects
+            # complete cleanly without raising, so a half-completed
+            # prior sweep heals on retry.
             await storage.delete(key)
-        except ObjectNotFoundError:
-            # Already gone (prior half-completed sweep). Treat as
-            # success — the purge invariant is "no raw PDF + stamped
-            # row", which we can still achieve.
-            _log.info("pdf_ttl.delete_missing_object_ok", quote_id=str(row.id), key=key)
         except StorageError as exc:
-            # Real failure — leave the row's URL intact so the next
-            # sweep retries; the audit trail (raw_pdf_purged_at stays
-            # null) shows the row hasn't been certified purged yet.
             _log.warning(
                 "pdf_ttl.storage_delete_failed",
                 quote_id=str(row.id),
@@ -140,8 +123,10 @@ async def purge_expired_pdfs(
 
         row.raw_pdf_storage_url = None
         row.raw_pdf_purged_at = cutoff_now
-        await session.commit()
         purged += 1
+
+    if purged:
+        await session.commit()
 
     result = PurgeResult(
         scanned=len(rows),

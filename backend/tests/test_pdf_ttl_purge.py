@@ -90,8 +90,11 @@ def test_storage_key_from_s3_url_with_no_key_returns_empty() -> None:
     assert storage_key_from_url("s3://my-bucket") == ""
 
 
-def test_storage_key_from_legacy_https_url_returns_path() -> None:
-    assert storage_key_from_url("https://cdn.example.com/audits/abc.pdf") == "audits/abc.pdf"
+def test_storage_key_from_unsupported_scheme_raises() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="unsupported storage URL scheme"):
+        storage_key_from_url("https://cdn.example.com/audits/abc.pdf")
 
 
 # ---------------------------------------------------------------------------
