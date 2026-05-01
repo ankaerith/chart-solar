@@ -6,6 +6,7 @@ their tables on `Base.metadata`. `alembic/env.py` imports
 """
 
 from backend.db.audit_models import Audit, Installer, InstallerQuote, UserPiiVault
+from backend.db.auth_models import MagicLink, Session, User
 from backend.db.base import Base
 from backend.db.entitlement_models import UserEntitlement
 from backend.db.models import IdempotencyKey, StripeEvent
@@ -17,8 +18,11 @@ __all__ = [
     "IdempotencyKey",
     "Installer",
     "InstallerQuote",
+    "MagicLink",
+    "Session",
     "StripeEvent",
     "TmyCache",
+    "User",
     "UserEntitlement",
     "UserPiiVault",
 ]

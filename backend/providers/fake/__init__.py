@@ -6,6 +6,7 @@ also pick them up by default until live API keys are configured. They
 exist precisely so `engine/` stays Protocol-agnostic.
 """
 
+from backend.providers.fake.email import FakeEmailProvider
 from backend.providers.fake.geocoding import FakeGeocodingProvider
 from backend.providers.fake.incentive import FakeIncentiveProvider
 from backend.providers.fake.irradiance import FakeIrradianceProvider, synthetic_tmy
@@ -14,6 +15,7 @@ from backend.providers.fake.storage import FakeStorageProvider
 from backend.providers.fake.tariff import FakeTariffProvider
 
 __all__ = [
+    "FakeEmailProvider",
     "FakeGeocodingProvider",
     "FakeIncentiveProvider",
     "FakeIrradianceProvider",
