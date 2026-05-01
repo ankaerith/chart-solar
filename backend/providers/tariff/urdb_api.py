@@ -26,13 +26,14 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import httpx
 
 from backend.infra.http import make_get
 from backend.infra.retry import CircuitOpenError, RetryExhaustedError
+from backend.infra.util import utc_now
 from backend.providers.tariff import (
     CurrencyCode,
     TariffQuery,
@@ -55,10 +56,6 @@ class _CachedRate:
     schedule: TariffSchedule
 
 
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
-
-
 class UrdbApiProvider:
     """Live URDB adapter against ``api.openei.org/utility_rates``.
 
@@ -76,7 +73,7 @@ class UrdbApiProvider:
         fallback: UrdbSeedProvider | None = None,
         cache_ttl: timedelta = DEFAULT_CACHE_TTL,
         cache_max_entries: int = DEFAULT_CACHE_MAX_ENTRIES,
-        clock: Callable[[], datetime] = _utc_now,
+        clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self._api_key = api_key
         self._fallback = fallback if fallback is not None else UrdbSeedProvider()

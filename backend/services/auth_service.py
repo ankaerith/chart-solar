@@ -28,10 +28,9 @@ therefore can't be turned into forged auth links or stolen sessions.
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse, urlunparse
 
 from sqlalchemy import select
@@ -40,6 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.config import settings
 from backend.db.auth_models import MagicLink, Session, User
 from backend.infra.logging import get_logger
+from backend.infra.util import sha256_hex, utc_now
 from backend.providers.email import EmailProvider
 
 _log = get_logger(__name__)
@@ -51,15 +51,6 @@ _TOKEN_BYTES = 32
 
 class MagicLinkError(RuntimeError):
     """Raised when consume rejects a token (expired / already used / unknown)."""
-
-
-def _hash_token(raw: str) -> str:
-    """sha256 of the raw token; the raw value never lands in a DB row."""
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 def _normalise_email(value: str) -> str:
@@ -81,12 +72,12 @@ async def request_magic_link(
     learns nothing about the system's user-table contents from a
     sign-in attempt.
     """
-    issued_at = now or _utc_now()
+    issued_at = now or utc_now()
     raw_token = secrets.token_urlsafe(_TOKEN_BYTES)
     target_email = _normalise_email(email)
 
     link = MagicLink(
-        token_hash=_hash_token(raw_token),
+        token_hash=sha256_hex(raw_token),
         email=target_email,
         expires_at=issued_at + timedelta(seconds=settings.auth_magic_link_ttl_seconds),
     )
@@ -118,8 +109,8 @@ async def consume_magic_link(
     :class:`MagicLinkError` for any rejection — the API translates that
     to 401 / 410 with no further detail (the link stays opaque).
     """
-    when = now or _utc_now()
-    token_hash = _hash_token(raw_token)
+    when = now or utc_now()
+    token_hash = sha256_hex(raw_token)
 
     link = await session.get(MagicLink, token_hash)
     if link is None:
@@ -146,7 +137,7 @@ async def consume_magic_link(
 
     raw_session_token = secrets.token_urlsafe(_TOKEN_BYTES)
     session_row = Session(
-        token_hash=_hash_token(raw_session_token),
+        token_hash=sha256_hex(raw_session_token),
         user_id=user_row.id,
         expires_at=when + timedelta(seconds=settings.auth_session_ttl_seconds),
     )
@@ -169,11 +160,11 @@ async def revoke_session(
     regardless, so the UX of "click sign-out, you're signed out" is
     preserved even if the cookie was already invalid.
     """
-    token_hash = _hash_token(raw_token)
+    token_hash = sha256_hex(raw_token)
     row = await session.get(Session, token_hash)
     if row is None or row.revoked_at is not None:
         return False
-    row.revoked_at = now or _utc_now()
+    row.revoked_at = now or utc_now()
     await session.commit()
     _log.info("auth.session_revoked", user_id=str(row.user_id))
     return True
@@ -191,8 +182,8 @@ async def user_id_for_session_token(
     session cookie; it must be cheap. ``token_hash`` is the primary
     key on ``sessions`` so the lookup is index-only.
     """
-    when = now or _utc_now()
-    row = await session.get(Session, _hash_token(raw_token))
+    when = now or utc_now()
+    row = await session.get(Session, sha256_hex(raw_token))
     if row is None:
         return None
     if row.revoked_at is not None:
