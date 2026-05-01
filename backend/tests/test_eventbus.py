@@ -21,6 +21,7 @@ from backend.domain.events import (
     PaymentSucceeded,
     _BaseEvent,
 )
+from backend.entitlements.features import Tier
 from backend.infra.eventbus import clear_subscribers, dispatch, subscribe
 
 
@@ -39,7 +40,7 @@ def test_dispatch_invokes_subscribed_handler() -> None:
     def handler(event: PaymentSucceeded) -> None:
         received.append(event)
 
-    event = PaymentSucceeded(user_id="u1", tier="track", stripe_event_id="evt_1")
+    event = PaymentSucceeded(user_id="u1", tier=Tier.TRACK, stripe_event_id="evt_1")
     dispatch(event)
 
     assert received == [event]
@@ -53,7 +54,7 @@ def test_dispatch_skips_handlers_for_unrelated_events() -> None:
     def forecast_handler(event: ForecastCompleted) -> None:
         received.append(event)
 
-    dispatch(PaymentSucceeded(user_id="u1", tier="t", stripe_event_id="evt_1"))
+    dispatch(PaymentSucceeded(user_id="u1", tier=Tier.FREE, stripe_event_id="evt_1"))
     assert received == []
 
 
@@ -66,7 +67,7 @@ def test_dispatch_walks_mro_so_base_class_subscribers_catch_everything() -> None
     def metric_shim(event: _BaseEvent) -> None:
         seen.append(type(event).__name__)
 
-    dispatch(PaymentSucceeded(user_id="u1", tier="t", stripe_event_id="evt_1"))
+    dispatch(PaymentSucceeded(user_id="u1", tier=Tier.FREE, stripe_event_id="evt_1"))
     dispatch(ForecastCompleted(job_id="j1", user_id="u1", result_summary={"artifact_keys": []}))
     assert seen == ["PaymentSucceeded", "ForecastCompleted"]
 
@@ -84,7 +85,7 @@ def test_subscriber_failure_is_isolated_and_does_not_break_publisher() -> None:
     def sibling(event: PaymentSucceeded) -> None:
         sibling_called.append(event.user_id)
 
-    dispatch(PaymentSucceeded(user_id="u1", tier="t", stripe_event_id="evt_1"))
+    dispatch(PaymentSucceeded(user_id="u1", tier=Tier.FREE, stripe_event_id="evt_1"))
     assert sibling_called == ["u1"]
 
 
@@ -105,12 +106,12 @@ def test_payment_grant_subscriber_is_idempotent_on_replay() -> None:
 
     original = PaymentSucceeded(
         user_id="u1",
-        tier="decision_pack",
+        tier=Tier.DECISION_PACK,
         stripe_event_id="evt_abc",
     )
     replay = PaymentSucceeded(
         user_id="u1",
-        tier="decision_pack",
+        tier=Tier.DECISION_PACK,
         stripe_event_id="evt_abc",
     )
     dispatch(original)
@@ -131,7 +132,7 @@ def test_handlers_are_invoked_in_registration_order() -> None:
     def second(event: PaymentSucceeded) -> None:
         order.append("second")
 
-    dispatch(PaymentSucceeded(user_id="u1", tier="t", stripe_event_id="evt_1"))
+    dispatch(PaymentSucceeded(user_id="u1", tier=Tier.FREE, stripe_event_id="evt_1"))
     assert order == ["first", "second"]
 
 
@@ -143,7 +144,7 @@ def test_clear_subscribers_drops_all_registrations() -> None:
         received.append(event)
 
     clear_subscribers()
-    dispatch(PaymentSucceeded(user_id="u1", tier="t", stripe_event_id="evt_1"))
+    dispatch(PaymentSucceeded(user_id="u1", tier=Tier.FREE, stripe_event_id="evt_1"))
     assert received == []
 
 
@@ -151,7 +152,7 @@ def test_event_payloads_are_immutable() -> None:
     """Frozen dataclasses prevent a buggy subscriber from mutating
     state visible to siblings — critical because the bus has no
     isolation layer between handlers."""
-    event = PaymentSucceeded(user_id="u1", tier="t", stripe_event_id="evt_1")
+    event = PaymentSucceeded(user_id="u1", tier=Tier.FREE, stripe_event_id="evt_1")
     with pytest.raises(Exception):  # noqa: B017 — dataclasses raises FrozenInstanceError
         event.user_id = "u2"  # type: ignore[misc]
 

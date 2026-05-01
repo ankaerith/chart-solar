@@ -19,6 +19,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from backend.entitlements.features import Tier
+
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
@@ -65,7 +67,7 @@ class PaymentSucceeded(_BaseEvent):
     """
 
     user_id: str
-    tier: str
+    tier: Tier
     stripe_event_id: str
 
 
@@ -74,7 +76,7 @@ class PaymentRefunded(_BaseEvent):
     """Refund issued; entitlements should be revoked for the period."""
 
     user_id: str
-    tier: str
+    tier: Tier
     stripe_event_id: str
 
 
