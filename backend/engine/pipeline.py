@@ -138,7 +138,24 @@ def _resolve_consumption(c: ConsumptionInputs | None) -> list[float]:
 
 
 def _net_load(state: ForecastState) -> list[float]:
-    """Hourly grid net-load: positive = import, negative = export."""
+    """Hourly grid net-load: positive = import, negative = export.
+
+    When ``engine.battery_dispatch`` has produced post-battery
+    streams, this returns the *post-battery* signed net load
+    (``import − export``) so the tariff + export-credit steps bill
+    against what actually hits the meter. Pre-battery shape — pure
+    ``consumption − production`` — when no battery dispatch ran.
+    """
+    battery = state.artifacts.get("engine.battery_dispatch")
+    if battery is not None:
+        return [
+            imp - exp
+            for imp, exp in zip(
+                battery.hourly_grid_import_kwh,
+                battery.hourly_grid_export_kwh,
+                strict=True,
+            )
+        ]
     consumption: list[float] = state.artifacts["engine.consumption"]
     dc: DcProductionResult = state.artifacts["engine.dc_production"]
     return [c - p for c, p in zip(consumption, dc.hourly_ac_kw, strict=True)]

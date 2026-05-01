@@ -292,6 +292,82 @@ def test_pipeline_runs_battery_step_when_battery_inputs_present() -> None:
     assert artifact.annual_charged_kwh > 0.0
 
 
+def test_pipeline_tariff_bills_against_post_battery_import_stream() -> None:
+    """With a battery installed, the tariff bill is computed against
+    the post-battery grid import — not the pre-battery net load. A
+    self-consumption battery on a TOU tariff with peak-hour imports
+    must produce a strictly *lower* annual energy charge than the
+    same forecast without a battery."""
+    system = SystemInputs(lat=33.45, lon=-112.07, dc_kw=8.0, tilt_deg=25, azimuth_deg=180)
+    consumption = ConsumptionInputs(annual_kwh=12_000.0)
+    tariff = TariffInputs(country="US", schedule=_two_band_tou())
+    tmy = synthetic_tmy(lat=system.lat, lon=system.lon)
+
+    no_battery = run_forecast(
+        ForecastInputs(
+            system=system,
+            financial=FinancialInputs(),
+            tariff=tariff,
+            consumption=consumption,
+        ),
+        tmy=tmy,
+    )
+    with_battery = run_forecast(
+        ForecastInputs(
+            system=system,
+            financial=FinancialInputs(),
+            tariff=tariff,
+            consumption=consumption,
+            battery=_battery(),
+        ),
+        tmy=tmy,
+    )
+
+    no_battery_bill = no_battery.artifacts["engine.tariff"]
+    with_battery_bill = with_battery.artifacts["engine.tariff"]
+    assert with_battery_bill.annual_total < no_battery_bill.annual_total
+
+
+def test_pipeline_export_credit_bills_against_post_battery_export_stream() -> None:
+    """A self-consumption battery soaks up midday solar surplus, so
+    the post-battery export stream is smaller than the pre-battery
+    surplus. Export credit must shrink accordingly — otherwise the
+    bill avoidance and SEG payment double-count the same kWh."""
+    system = SystemInputs(lat=33.45, lon=-112.07, dc_kw=8.0, tilt_deg=25, azimuth_deg=180)
+    consumption = ConsumptionInputs(annual_kwh=4_000.0)  # solar-rich profile
+    tariff = TariffInputs(
+        country="US",
+        schedule=_flat_tariff(),
+        export_credit=SegFlatConfig(flat_rate_per_kwh=0.05),
+    )
+    tmy = synthetic_tmy(lat=system.lat, lon=system.lon)
+
+    no_battery = run_forecast(
+        ForecastInputs(
+            system=system,
+            financial=FinancialInputs(),
+            tariff=tariff,
+            consumption=consumption,
+        ),
+        tmy=tmy,
+    )
+    with_battery = run_forecast(
+        ForecastInputs(
+            system=system,
+            financial=FinancialInputs(),
+            tariff=tariff,
+            consumption=consumption,
+            battery=_battery(),
+        ),
+        tmy=tmy,
+    )
+
+    assert (
+        with_battery.artifacts["engine.export_credit"].annual_credit
+        < no_battery.artifacts["engine.export_credit"].annual_credit
+    )
+
+
 def test_charged_minus_discharged_kwh_covers_round_trip_loss() -> None:
     """Energy in must exceed energy out by the round-trip-efficiency
     factor: discharged ≤ charged × rte. Holds at the annual roll-up."""
