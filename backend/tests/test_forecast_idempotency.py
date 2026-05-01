@@ -59,17 +59,17 @@ async def clean_idempotency() -> AsyncIterator[None]:
 def fake_enqueue() -> Iterator[list[tuple[str, dict[str, Any]]]]:
     """Capture forecast enqueues without actually pushing onto Redis.
 
-    The endpoint imports ``enqueue_forecast`` at module import time, so
-    the patch target is the symbol on ``backend.api.forecast`` — patching
-    ``backend.workers.queue.enqueue_forecast`` would miss the binding
-    the endpoint actually uses.
+    The endpoint imports ``submit_forecast`` (the service-layer
+    trampoline) at module import time, so the patch target is the
+    symbol on ``backend.api.forecast`` — patching the service module's
+    own re-export would miss the binding the endpoint actually uses.
     """
     captured: list[tuple[str, dict[str, Any]]] = []
 
     def _capture(job_id: str, payload: dict[str, Any]) -> None:
         captured.append((job_id, payload))
 
-    with patch("backend.api.forecast.enqueue_forecast", side_effect=_capture):
+    with patch("backend.api.forecast.submit_forecast", side_effect=_capture):
         yield captured
 
 

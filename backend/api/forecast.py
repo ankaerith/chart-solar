@@ -18,7 +18,6 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from rq.job import JobStatus
 
 import backend.database as _db
 from backend.engine.inputs import ForecastInputs
@@ -28,7 +27,7 @@ from backend.infra.idempotency import (
     claim_idempotency_slot,
 )
 from backend.infra.logging import get_logger
-from backend.workers.queue import enqueue_forecast, get_job
+from backend.services.forecast_service import get_forecast_job, submit_forecast
 
 router = APIRouter()
 log = get_logger(__name__)
@@ -40,7 +39,7 @@ FORECAST_ROUTE_KEY = "POST /api/forecast"
 
 
 @router.post("/forecast")
-async def submit_forecast(
+async def submit_forecast_endpoint(
     request: Request,
     inputs: ForecastInputs,
     user_id: str = Depends(current_user_id),
@@ -79,42 +78,19 @@ async def submit_forecast(
         )
         return response_body
 
-    enqueue_forecast(job_id, inputs.model_dump())
+    submit_forecast(job_id, inputs.model_dump())
     log.info("forecast.enqueued", job_id=job_id, user_id=user_id)
     return response_body
 
 
-#: Map RQ's internal job states onto the four-state vocabulary the API
-#: contract exposes. ``deferred`` / ``scheduled`` / ``created`` collapse
-#: onto ``queued`` — all three mean "the engine hasn't started", which
-#: is what the caller actually needs to know. ``stopped`` / ``canceled``
-#: surface as ``error`` so the UI tells the user the job won't complete;
-#: the operator who killed it has the audit trail.
-_RQ_STATUS_TO_API_STATUS: dict[JobStatus, str] = {
-    JobStatus.CREATED: "queued",
-    JobStatus.QUEUED: "queued",
-    JobStatus.DEFERRED: "queued",
-    JobStatus.SCHEDULED: "queued",
-    JobStatus.STARTED: "running",
-    JobStatus.FINISHED: "done",
-    JobStatus.FAILED: "error",
-    JobStatus.STOPPED: "error",
-    JobStatus.CANCELED: "error",
-}
-
-
 @router.get("/forecast/{job_id}")
 async def forecast_status(job_id: str) -> dict[str, Any]:
-    job = get_job(job_id)
-    if job is None:
+    view = get_forecast_job(job_id)
+    if view is None:
         raise HTTPException(status_code=404, detail="job not found")
-    api_status = _RQ_STATUS_TO_API_STATUS[JobStatus(job.get_status())]
-    response: dict[str, Any] = {"job_id": job_id, "status": api_status}
-    if api_status == "done":
-        response["result"] = job.result
-    elif api_status == "error":
-        # RQ's serialised traceback — caller self-diagnoses without
-        # grepping worker logs; the same trace also lands in structured
-        # logging via the worker's exception handler.
-        response["error"] = job.exc_info
+    response: dict[str, Any] = {"job_id": view.job_id, "status": view.status}
+    if view.result is not None:
+        response["result"] = view.result
+    if view.error is not None:
+        response["error"] = view.error
     return response
