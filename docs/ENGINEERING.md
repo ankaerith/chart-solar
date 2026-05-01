@@ -172,8 +172,6 @@ down_revision = "f5a3b7c2d1e8"
 
 Before pushing a migration, run `uv run alembic heads` against the up-to-date main. A single head id means you're chained correctly; two means another PR merged ahead of you and you need to re-parent. The fix is one line + a force-push to the PR branch — but it's invisible if you only watch CI on your own branch, so the local check is the cheap save.
 
-This bit us twice during the chart-solar-g93 → 78j PR train (the magic-link auth landing); a memory-pinned reminder lives at `feedback_alembic_stacked_migrations.md` in the auto-memory.
-
 ## Architecture decisions
 
 See [docs/adr/](./adr/). Anything that fits the "future reader will be surprised" test gets an ADR.
