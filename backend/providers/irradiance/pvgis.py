@@ -24,6 +24,7 @@ from typing import Any
 
 from backend.infra.http import make_get
 from backend.providers.irradiance import HOURS_PER_TMY, IrradianceSource, TmyData
+from backend.providers.irradiance._aggregation import aggregate_hourly_to_monthly_mean
 
 PVGIS_TMY_URL = "https://re.jrc.ec.europa.eu/api/v5_2/tmy"
 
@@ -84,7 +85,7 @@ def parse_pvgis_json(
 
     monthly_rh: list[float] | None = None
     if has_rh and len(rh) == HOURS_PER_TMY:
-        monthly_rh = _aggregate_hourly_to_monthly_mean(rh)
+        monthly_rh = aggregate_hourly_to_monthly_mean(rh)
 
     return TmyData(
         lat=source_lat,
@@ -100,34 +101,3 @@ def parse_pvgis_json(
         wind_speed_m_s=wind,
         relative_humidity_pct_per_month=monthly_rh,
     )
-
-
-_HOURS_PER_MONTH_NON_LEAP: tuple[int, ...] = (
-    31 * 24,
-    28 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-)
-
-
-def _aggregate_hourly_to_monthly_mean(values: list[float]) -> list[float]:
-    """Average an 8760-hour series into 12 monthly means.
-
-    Mirrors the helper in ``openmeteo.py`` — kept local here to keep
-    each provider self-contained and avoid cross-adapter imports.
-    """
-    out: list[float] = []
-    cursor = 0
-    for hours in _HOURS_PER_MONTH_NON_LEAP:
-        chunk = values[cursor : cursor + hours]
-        out.append(sum(chunk) / len(chunk))
-        cursor += hours
-    return out
