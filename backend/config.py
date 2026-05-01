@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     s3_access_key_id: str | None = None
     s3_secret_access_key: str | None = None
 
+    # PDF retention. The Phase 1 closed decision is 24-72h; default 72
+    # so users have time to fix mis-uploads before the TTL purge runs.
+    # Lower it via env in stricter privacy environments.
+    pdf_storage_ttl_hours: int = 72
+
     # Vertex AI (PDF extraction). ZDR is non-negotiable for production —
     # the client wrapper refuses to start unless both flags are true. The
     # abuse-logging exemption requires GCP-side enrollment per
