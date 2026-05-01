@@ -12,7 +12,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 ENTITLEMENTS_REVISION_ID = "f5a3b7c2d1e8"
-PARENT_REVISION_ID = "8b3e7a1c4d20"
+PARENT_REVISION_ID = "a1f2c4d6b8e0"
 
 
 @pytest.fixture(scope="module")

@@ -1,7 +1,7 @@
 """user_entitlements
 
 Revision ID: f5a3b7c2d1e8
-Revises: 8b3e7a1c4d20
+Revises: a1f2c4d6b8e0
 Create Date: 2026-04-30 23:00:00.000000
 
 Backs ``backend.services.entitlements_grants`` — one row per (user,
@@ -20,7 +20,7 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 revision: str = "f5a3b7c2d1e8"
-down_revision: str | Sequence[str] | None = "8b3e7a1c4d20"
+down_revision: str | Sequence[str] | None = "a1f2c4d6b8e0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
