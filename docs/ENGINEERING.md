@@ -13,7 +13,7 @@ A bead is closed when:
 5. **No new ZFC violations.** Application code does not embed semantic logic the model should be doing (per `PRODUCT_PLAN.md` § Cognition Architecture). If a PR introduces one knowingly — flag it in the description.
 6. **Snapshot integrity.** Engine changes pin `engine_version` + `pvlib_version`; prompt changes pin `prompt_version`. Saved artifacts re-open without silent recomputation.
 7. **License + attribution.** New data source → entry in `/credits`; new dependency → license verified; cached rows carry source attribution columns.
-8. **PII boundary respected.** Any read of user-scoped data goes through `require_owner`. Any write of installer-rep data strips direct contact PII at extraction.
+8. **PII boundary respected.** Every read or delete of user-scoped data filters by `user_id` in the SQL WHERE clause (load-and-check is not an alternative — it leaks existence on wrong-owner). Any write of installer-rep data strips direct contact PII at extraction.
 9. **Disclaimer present.** AI-assist + not-financial-advice disclaimer appears on every audit report and exported methodology PDF. Non-negotiable.
 10. **Manual verification stated.** UI work has been opened in a real browser. API work has a verified curl/test. "Tests pass" is not the same as "feature works."
 
@@ -24,7 +24,7 @@ PR template (`.github/PULL_REQUEST_TEMPLATE.md`) restates this checklist.
 ```
 backend/
   api/                 # FastAPI routes; thin — orchestration only
-    deps.py              # require_owner, get_db, get_user, etc.
+    auth/                # require_authenticated dep, magic-link routes, session middleware
     irradiance.py        # GET /api/irradiance
     forecast.py          # POST /api/forecast → enqueue
     forecast_status.py   # GET /api/forecast/{job_id}
