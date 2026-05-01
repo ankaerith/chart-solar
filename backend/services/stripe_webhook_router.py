@@ -110,12 +110,12 @@ def route_event(event: dict[str, Any]) -> PaymentSucceeded | PaymentRefunded | N
     if event_type == "charge.refunded":
         return PaymentRefunded(
             user_id=user_id,
-            tier=tier.value,
+            tier=tier,
             stripe_event_id=event_id,
         )
     return PaymentSucceeded(
         user_id=user_id,
-        tier=tier.value,
+        tier=tier,
         stripe_event_id=event_id,
     )
 

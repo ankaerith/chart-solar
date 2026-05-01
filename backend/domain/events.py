@@ -10,6 +10,13 @@ Each event carries an ``event_id`` so subscribers can dedupe replays
 might fire twice, but we only credit the user once). The ``occurred_at``
 field is the publisher-side wall-clock — useful for telemetry but not
 for ordering decisions, which the in-process bus doesn't guarantee.
+
+Field types are tightened where the producer can validate once at the
+boundary — see ``PaymentSucceeded.tier`` / ``PaymentRefunded.tier``
+typed as :class:`Tier` so subscribers don't each re-parse the same
+string. ``backend.entitlements`` is a sibling top-level package, not
+``backend.infra``, so importing :class:`Tier` here is allowed by the
+``engine is pure`` import-linter contract.
 """
 
 from __future__ import annotations
@@ -18,6 +25,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
+
+from backend.entitlements.features import Tier
 
 
 def _utc_now() -> datetime:
@@ -65,7 +74,7 @@ class PaymentSucceeded(_BaseEvent):
     """
 
     user_id: str
-    tier: str
+    tier: Tier
     stripe_event_id: str
 
 
@@ -74,7 +83,7 @@ class PaymentRefunded(_BaseEvent):
     """Refund issued; entitlements should be revoked for the period."""
 
     user_id: str
-    tier: str
+    tier: Tier
     stripe_event_id: str
 
 

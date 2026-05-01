@@ -289,7 +289,7 @@ async def test_subscriber_grants_tier_on_payment_succeeded(db_session: Any) -> N
     await dispatch_async(
         PaymentSucceeded(
             user_id="user_e",
-            tier=Tier.DECISION_PACK.value,
+            tier=Tier.DECISION_PACK,
             stripe_event_id="evt_e1",
         )
     )
@@ -301,14 +301,14 @@ async def test_subscriber_revokes_tier_on_payment_refunded(db_session: Any) -> N
     await dispatch_async(
         PaymentSucceeded(
             user_id="user_f",
-            tier=Tier.DECISION_PACK.value,
+            tier=Tier.DECISION_PACK,
             stripe_event_id="evt_f1",
         )
     )
     await dispatch_async(
         PaymentRefunded(
             user_id="user_f",
-            tier=Tier.DECISION_PACK.value,
+            tier=Tier.DECISION_PACK,
             stripe_event_id="evt_f2",
         )
     )
