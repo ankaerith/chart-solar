@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import csv
 import io
-from datetime import UTC, datetime
 
 from backend.infra.http import make_get
+from backend.infra.util import utc_now
 from backend.providers.irradiance import HOURS_PER_TMY, IrradianceSource, TmyData
 from backend.providers.irradiance._aggregation import aggregate_hourly_to_monthly_mean
 
@@ -112,7 +112,7 @@ def parse_nsrdb_csv(body: str, *, source_lat: float, source_lon: float) -> TmyDa
         elevation_m=elevation,
         timezone=timezone,
         source="nsrdb",
-        fetched_at=datetime.now(UTC),
+        fetched_at=utc_now(),
         ghi_w_m2=ghi,
         dni_w_m2=dni,
         dhi_w_m2=dhi,

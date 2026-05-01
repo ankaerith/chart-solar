@@ -12,10 +12,9 @@ modeling accuracy benchmarks.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from pvlib.location import Location
 
+from backend.infra.util import utc_now
 from backend.providers.irradiance import (
     HOURS_PER_TMY,
     IrradianceSource,
@@ -67,7 +66,7 @@ def synthetic_tmy(
         elevation_m=elevation_m,
         timezone=timezone,
         source="openmeteo",
-        fetched_at=datetime.now(UTC),
+        fetched_at=utc_now(),
         ghi_w_m2=[float(v) for v in clear_sky["ghi"].tolist()],
         dni_w_m2=[float(v) for v in clear_sky["dni"].tolist()],
         dhi_w_m2=[float(v) for v in clear_sky["dhi"].tolist()],

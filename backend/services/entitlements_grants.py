@@ -15,8 +15,6 @@ DB-level unique index is the source of truth.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 from sqlalchemy import case, desc, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -25,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.entitlement_models import UserEntitlement
 from backend.entitlements.features import TIER_RANK, Tier
 from backend.infra.logging import get_logger
+from backend.infra.util import utc_now
 
 _log = get_logger(__name__)
 
@@ -102,7 +101,7 @@ async def revoke_by_event(
         update(UserEntitlement)
         .where(UserEntitlement.id == candidate_id)
         .values(
-            revoked_at=datetime.now(UTC),
+            revoked_at=utc_now(),
             revoked_by_event_id=revoked_by_event_id,
         )
         .returning(UserEntitlement.id)
