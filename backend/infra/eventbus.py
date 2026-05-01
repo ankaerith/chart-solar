@@ -27,13 +27,20 @@ Properties:
 
 from __future__ import annotations
 
+import inspect
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from backend.domain.events import _BaseEvent
 from backend.infra.logging import get_correlation_id, get_logger
 
-Handler = Callable[[_BaseEvent], None]
+#: Subscribers may be sync or async. ``dispatch`` invokes only the sync
+#: ones (and warns on async); ``dispatch_async`` awaits both. The
+#: webhook hot path uses ``dispatch_async`` so an async grant subscriber
+#: completes before we 200 the upstream caller.
+SyncHandler = Callable[[_BaseEvent], None]
+AsyncHandler = Callable[[_BaseEvent], Awaitable[None]]
+Handler = SyncHandler | AsyncHandler
 
 _log = get_logger(__name__)
 
@@ -42,27 +49,29 @@ _HANDLERS: dict[type[_BaseEvent], list[Handler]] = defaultdict(list)
 
 def subscribe[E: _BaseEvent](
     event_type: type[E],
-) -> Callable[[Callable[[E], None]], Callable[[E], None]]:
-    """Decorator: register a handler for events of (or extending) ``event_type``.
+) -> Callable[[Callable[[E], None] | Callable[[E], Awaitable[None]]], Callable[..., object]]:
+    """Decorator: register a sync or async handler for ``event_type``.
 
     Usage::
 
         @subscribe(PaymentSucceeded)
-        def grant_entitlement(event: PaymentSucceeded) -> None:
-            ...
+        async def grant_entitlement(event: PaymentSucceeded) -> None:
+            async with SessionLocal() as session:
+                await grant_tier(session, ...)
 
-    The returned function is the original handler so call sites can
-    still invoke it directly (handy for unit tests). Registrations are
-    process-local; a fork() crosses a boundary and the new process
-    won't see the parent's handlers.
+    Sync handlers run on every dispatch path (``dispatch`` and
+    ``dispatch_async``); async handlers are skipped by sync ``dispatch``
+    with a warning so a wrong-path call site is loud.
     """
 
-    def decorator(handler: Callable[[E], None]) -> Callable[[E], None]:
+    def decorator(
+        handler: Callable[[E], None] | Callable[[E], Awaitable[None]],
+    ) -> Callable[..., object]:
         # The `_HANDLERS` map is invariant in handler signature — it
-        # stores `Callable[[_BaseEvent], None]`. Subscribers register
-        # the narrower `Callable[[E], None]`; the dispatcher only ever
-        # invokes a handler with an event whose type is `E` or
-        # narrower (the cls-keyed lookup), so the cast is safe.
+        # stores `Callable[[_BaseEvent], …]`. Subscribers register the
+        # narrower `Callable[[E], …]`; the dispatcher only ever invokes
+        # a handler with an event whose type is `E` or narrower (the
+        # cls-keyed lookup), so the cast is safe.
         _HANDLERS[event_type].append(handler)  # type: ignore[arg-type]
         return handler
 
@@ -70,30 +79,73 @@ def subscribe[E: _BaseEvent](
 
 
 def dispatch(event: _BaseEvent) -> None:
-    """Notify every handler registered for ``type(event)`` or any base.
+    """Notify every sync handler registered for ``type(event)`` or any base.
 
     Walks the MRO so a handler registered on ``_BaseEvent`` (typically
-    a logging or metrics shim) catches everything. Subscriber failures
-    are caught + logged with the event payload + correlation id so the
-    publisher can complete its own work; the failed handler does not
-    abort delivery to siblings.
+    a logging or metrics shim) catches everything. Async handlers are
+    *not* invoked here — call ``await dispatch_async(event)`` instead.
+    Subscriber failures are caught + logged with the event payload +
+    correlation id; the publisher never sees them.
     """
     cid = get_correlation_id()
+    for handler, _ in _walk(event):
+        if inspect.iscoroutinefunction(handler):
+            _log.warning(
+                "eventbus.async_handler_skipped_by_sync_dispatch",
+                handler=getattr(handler, "__qualname__", repr(handler)),
+                event_type=type(event).__name__,
+                hint="use await dispatch_async(event) for async subscribers",
+            )
+            continue
+        try:
+            handler(event)
+        except Exception as exc:  # noqa: BLE001 — bus must not propagate
+            _log.error(
+                "eventbus.handler_failed",
+                handler=getattr(handler, "__qualname__", repr(handler)),
+                event_type=type(event).__name__,
+                event_id=event.event_id,
+                correlation_id=cid,
+                error=repr(exc),
+            )
+
+
+async def dispatch_async(event: _BaseEvent) -> None:
+    """Notify every handler — sync or async — registered for ``event``.
+
+    Async handlers are awaited in registration order; sync handlers run
+    inline. Both share the same failure isolation as ``dispatch``: an
+    exception is logged with payload + correlation id and never
+    propagates to the publisher. The Stripe webhook calls this so the
+    entitlement grant completes before the 200 lands back at Stripe.
+    """
+    cid = get_correlation_id()
+    for handler, _ in _walk(event):
+        try:
+            if inspect.iscoroutinefunction(handler):
+                await handler(event)
+            else:
+                handler(event)
+        except Exception as exc:  # noqa: BLE001 — bus must not propagate
+            _log.error(
+                "eventbus.handler_failed",
+                handler=getattr(handler, "__qualname__", repr(handler)),
+                event_type=type(event).__name__,
+                event_id=event.event_id,
+                correlation_id=cid,
+                error=repr(exc),
+            )
+
+
+def _walk(event: _BaseEvent) -> list[tuple[Handler, type[_BaseEvent]]]:
+    """Collect handlers for ``type(event)`` and every base class above it."""
+    out: list[tuple[Handler, type[_BaseEvent]]] = []
     for cls in type(event).__mro__:
         if cls is object:
             continue
         for handler in _HANDLERS.get(cls, ()):
-            try:
-                handler(event)
-            except Exception as exc:  # noqa: BLE001 — bus must not propagate
-                _log.error(
-                    "eventbus.handler_failed",
-                    handler=getattr(handler, "__qualname__", repr(handler)),
-                    event_type=type(event).__name__,
-                    event_id=event.event_id,
-                    correlation_id=cid,
-                    error=repr(exc),
-                )
+            out.append((handler, cls))
+    return out
 
 
 def clear_subscribers() -> None:
@@ -101,4 +153,4 @@ def clear_subscribers() -> None:
     _HANDLERS.clear()
 
 
-__all__ = ["clear_subscribers", "dispatch", "subscribe"]
+__all__ = ["clear_subscribers", "dispatch", "dispatch_async", "subscribe"]
