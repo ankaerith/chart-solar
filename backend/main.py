@@ -4,16 +4,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import entitlements, forecast, health, irradiance
+from backend.api import entitlements, forecast, health, irradiance, stripe_webhook
 from backend.config import settings
 from backend.infra.logging import configure_logging
 from backend.infra.middleware import CorrelationIdMiddleware
+from backend.services.entitlements_subscribers import register_subscribers
 
 configure_logging("api")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Register the entitlements grant/revoke handlers on the in-process
+    # event bus. Idempotent — safe to re-enter on a hot reload.
+    register_subscribers()
     yield
 
 
@@ -36,3 +40,4 @@ app.include_router(health.router, prefix="/api")
 app.include_router(forecast.router, prefix="/api")
 app.include_router(irradiance.router, prefix="/api")
 app.include_router(entitlements.router, prefix="/api")
+app.include_router(stripe_webhook.router, prefix="/api")
