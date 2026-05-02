@@ -1,10 +1,12 @@
 """Redis + RQ. SQS adapter slot is left for the AWS path."""
 
+import asyncio
 from functools import lru_cache
 from typing import Any
 
 import redis
 from rq import Queue, Retry
+from rq.exceptions import NoSuchJobError
 from rq.job import Job
 
 from backend.config import settings
@@ -40,12 +42,7 @@ def get_queue() -> Queue:
     return Queue("forecasts", connection=get_redis())
 
 
-def enqueue_forecast(job_id: str, payload: dict[str, Any]) -> None:
-    """Enqueue a forecast job with the standard timeout / TTL / retry
-    policy and the request's correlation ID stamped into job meta — so
-    worker log lines correlate with the originating HTTP request even
-    though they execute in a different process.
-    """
+def _enqueue_forecast_sync(job_id: str, payload: dict[str, Any]) -> None:
     from backend.workers.forecast_worker import run_forecast_job
 
     get_queue().enqueue(
@@ -63,8 +60,27 @@ def enqueue_forecast(job_id: str, payload: dict[str, Any]) -> None:
     )
 
 
+async def enqueue_forecast(job_id: str, payload: dict[str, Any]) -> None:
+    """Enqueue a forecast job with the standard timeout / TTL / retry
+    policy and the request's correlation ID stamped into job meta — so
+    worker log lines correlate with the originating HTTP request even
+    though they execute in a different process.
+
+    The redis-py client used here is synchronous; the LPUSH is offloaded
+    via ``asyncio.to_thread`` so a Redis stall can't block the API event
+    loop.
+    """
+    await asyncio.to_thread(_enqueue_forecast_sync, job_id, payload)
+
+
 def get_job(job_id: str) -> Job | None:
+    """Fetch an RQ job by id, or ``None`` if the job has aged out / never existed.
+
+    Only ``NoSuchJobError`` collapses to ``None``. Redis connection
+    errors and other infrastructure failures propagate so the API surfaces
+    a 5xx with structured logs instead of a misleading 404.
+    """
     try:
         return Job.fetch(job_id, connection=get_redis())
-    except Exception:
+    except NoSuchJobError:
         return None

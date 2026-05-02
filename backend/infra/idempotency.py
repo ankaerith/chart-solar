@@ -1,38 +1,31 @@
 """Idempotency for mutating POST endpoints + Stripe webhook dedupe.
 
-Two related primitives, one module:
+Three primitives, one module:
 
-* `@idempotent(route_key=…, ttl_seconds=…)` decorates a FastAPI handler.
-  When the client supplies an `Idempotency-Key` header, the request body
-  is hashed and cached against `(key, route)`; a replay returns the
-  original cached response, a body mismatch returns HTTP 409. Without
-  the header the handler runs as usual — opt-in per-call.
+* ``canonical_request_hash(body)`` — stable SHA-256 of a request body.
+* ``claim_idempotency_slot(...)`` — atomic ``(route, key)`` claim that
+  callers wrap around any side-effectful work (queue enqueue, charge
+  card, etc.). The first writer wins; concurrent identical-key requests
+  collapse to the winner's cached response.
+* ``record_stripe_event(...)`` — dedupe primitive for Stripe webhooks
+  keyed on ``event.id``.
 
-* `record_stripe_event(session, event_id, …)` is the dedupe primitive
-  for Stripe webhooks (which key on `event.id` rather than a
-  client-supplied header). Returns `True` on the first record and
-  `False` on every replay so callers grant entitlements exactly once.
-
-The route key is intentionally explicit (rather than `request.url.path`)
+The route key is intentionally explicit (rather than ``request.url.path``)
 so two routes with the same shape don't collide, and so URL refactors
 don't silently invalidate live cache entries.
 """
 
 from __future__ import annotations
 
-import functools
 import json
-from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from typing import Any, TypeVar, cast
+from typing import Any
 
-from fastapi import HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import backend.database as _db
 from backend.db.models import IdempotencyKey, StripeEvent
 from backend.infra.logging import get_logger
 from backend.infra.util import sha256_hex, utc_now
@@ -42,13 +35,20 @@ logger = get_logger(__name__)
 DEFAULT_TTL_SECONDS = 60 * 60 * 24  # 24 hours
 IDEMPOTENCY_HEADER = "idempotency-key"
 
-F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
-
 
 def canonical_request_hash(body: bytes) -> str:
-    """Stable sha256 of the raw request body — clients that send
-    semantically identical JSON with different whitespace get treated
-    as the same request."""
+    """Stable sha256 of the raw request body.
+
+    Whitespace and key ordering collapse to the same hash (``json.loads``
+    + sorted-key ``json.dumps``). Float precision normalises through
+    Python's float repr (``5.50`` and ``5.5`` collide; both load as
+    ``5.5``). Integer-vs-float literals do **not** collide: ``1`` and
+    ``1.0`` round-trip back to different JSON literals (``1`` vs ``1.0``)
+    and therefore hash differently — the cost is one duplicate enqueue
+    when a client toggles the literal style for the same numeric value;
+    there is no correctness risk because the worker reads typed
+    Pydantic inputs either way.
+    """
     if not body:
         return sha256_hex(b"")
     try:
@@ -97,33 +97,6 @@ def _claim_insert_stmt(
         .on_conflict_do_nothing(index_elements=["key", "route"])
     )
     return stmt.returning(IdempotencyKey.key) if returning else stmt
-
-
-async def _save(
-    session: AsyncSession,
-    *,
-    route: str,
-    key: str,
-    request_hash: str,
-    response_status: int,
-    response_body: dict[str, Any],
-    ttl_seconds: int,
-    now: datetime,
-) -> None:
-    """Insert the response row. Concurrent inserts race-lose harmlessly:
-    `ON CONFLICT (key, route) DO NOTHING` keeps the first writer's payload."""
-    await session.execute(
-        _claim_insert_stmt(
-            route=route,
-            key=key,
-            request_hash=request_hash,
-            response_status=response_status,
-            response_body=response_body,
-            expires_at=now + timedelta(seconds=ttl_seconds),
-            returning=False,
-        )
-    )
-    await session.commit()
 
 
 async def lookup_idempotency_response(
@@ -181,118 +154,13 @@ async def claim_idempotency_slot(
         return True, response_body
     existing = await lookup_idempotency_response(session, route=route, key=key, now=when)
     if existing is None:
-        # Pathological: row was inserted then expired between our INSERT
-        # and our follow-up SELECT. We never ran the side effect on this
-        # code path, so returning the would-be response is the next-best
-        # behaviour.
-        return False, response_body
+        # Pathological: a row was inserted then expired between our
+        # INSERT and our follow-up SELECT. We treat this as race-WON so
+        # the caller runs its side effect — returning the would-be
+        # response without enqueueing would hand the client a job_id
+        # for a job that never ran.
+        return True, response_body
     return False, existing
-
-
-def idempotent(
-    *,
-    route_key: str,
-    ttl_seconds: int = DEFAULT_TTL_SECONDS,
-) -> Callable[[F], F]:
-    """Decorate a FastAPI POST handler with idempotency-key replay protection.
-
-    The handler MUST accept a `request: Request` parameter (FastAPI
-    populates it). The wrapper inspects `request.headers["idempotency-key"]`:
-
-    * Header absent → handler runs as-is, no caching.
-    * Header present, novel → handler runs; response body + status cached
-      under `(key, route_key)` for `ttl_seconds`.
-    * Header present, replay (hash matches) → cached response returned
-      verbatim; handler is NOT invoked.
-    * Header present, hash mismatch → HTTP 409.
-
-    The cached response body must be JSON-serialisable. Handlers that
-    return a Pydantic model — the FastAPI default — satisfy this for free.
-    """
-
-    def decorator(func: F) -> F:
-        @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            request: Request | None = kwargs.get("request") or next(
-                (a for a in args if isinstance(a, Request)), None
-            )
-            if request is None:
-                # Caller forgot to declare `request: Request` — fail loudly
-                # rather than silently disabling idempotency.
-                raise RuntimeError(
-                    f"@idempotent on {func.__name__} requires a `request: Request` parameter"
-                )
-
-            key = request.headers.get(IDEMPOTENCY_HEADER)
-            if not key:
-                return await func(*args, **kwargs)
-
-            body = await request.body()
-            request_hash = canonical_request_hash(body)
-            now = utc_now()
-
-            async with _db.SessionLocal() as session:
-                existing = await _lookup(session, route_key, key, now)
-                if existing is not None:
-                    if existing.request_hash != request_hash:
-                        logger.warning(
-                            "idempotency.hash_mismatch",
-                            route=route_key,
-                            key=key,
-                        )
-                        raise HTTPException(
-                            status_code=status.HTTP_409_CONFLICT,
-                            detail=(
-                                "Idempotency-Key reused with a different request body. "
-                                "Pick a fresh key for new requests."
-                            ),
-                        )
-                    logger.info(
-                        "idempotency.replay",
-                        route=route_key,
-                        key=key,
-                        cached_status=existing.response_status,
-                    )
-                    return Response(
-                        content=json.dumps(existing.response_body),
-                        media_type="application/json",
-                        status_code=existing.response_status,
-                    )
-
-                result = await func(*args, **kwargs)
-                response_body = _serialise_response(result)
-                await _save(
-                    session,
-                    route=route_key,
-                    key=key,
-                    request_hash=request_hash,
-                    response_status=status.HTTP_200_OK,
-                    response_body=response_body,
-                    ttl_seconds=ttl_seconds,
-                    now=now,
-                )
-                logger.info(
-                    "idempotency.stored",
-                    route=route_key,
-                    key=key,
-                    ttl_seconds=ttl_seconds,
-                )
-            return result
-
-        return cast(F, wrapper)
-
-    return decorator
-
-
-def _serialise_response(result: Any) -> dict[str, Any]:
-    """Coerce a handler return value into a JSON-able dict for caching.
-    Non-dict, non-Pydantic shapes (e.g. lists) get wrapped in an
-    `_envelope` key so the cache table only ever stores objects."""
-    if hasattr(result, "model_dump"):
-        return cast(dict[str, Any], result.model_dump(mode="json"))
-    if isinstance(result, dict):
-        return result
-    return {"_envelope": json.loads(json.dumps(result, default=str))}
 
 
 async def record_stripe_event(
@@ -334,7 +202,6 @@ __all__ = [
     "IDEMPOTENCY_HEADER",
     "canonical_request_hash",
     "claim_idempotency_slot",
-    "idempotent",
     "lookup_idempotency_response",
     "record_stripe_event",
 ]
