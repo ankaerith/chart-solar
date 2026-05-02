@@ -1,40 +1,17 @@
-"""Alembic round-trip smoke for the user_entitlements.tier CHECK migration.
-
-Same shape as the other ``test_alembic_*_round_trip`` tests: structural
-smoke inside the unit suite so a malformed revision shows up in a local
-``pytest`` invocation rather than only in CI.
-"""
+"""Alembic round-trip smoke for the user_entitlements.tier CHECK migration."""
 
 from __future__ import annotations
 
-import pytest
-from alembic.config import Config
 from alembic.script import ScriptDirectory
+
+from backend.tests._alembic import assert_revision_in_chain
 
 TIER_CHECK_REVISION_ID = "b3c2d1e8f9a4"
 PARENT_REVISION_ID = "a8b2c4d6e9f1"
 
 
-@pytest.fixture(scope="module")
-def script() -> ScriptDirectory:
-    cfg = Config("alembic.ini")
-    return ScriptDirectory.from_config(cfg)
-
-
 def test_migration_is_in_chain(script: ScriptDirectory) -> None:
-    revision = script.get_revision(TIER_CHECK_REVISION_ID)
-    assert revision is not None
-    assert revision.down_revision == PARENT_REVISION_ID
-
-
-def test_migration_exposes_upgrade_and_downgrade(script: ScriptDirectory) -> None:
-    revision = script.get_revision(TIER_CHECK_REVISION_ID)
-    assert revision is not None
-    module = revision.module
-    assert callable(module.upgrade)
-    assert callable(module.downgrade)
-    assert module.revision == TIER_CHECK_REVISION_ID
-    assert module.down_revision == PARENT_REVISION_ID
+    assert_revision_in_chain(script, TIER_CHECK_REVISION_ID, PARENT_REVISION_ID)
 
 
 def test_check_constraint_registered_on_metadata() -> None:
