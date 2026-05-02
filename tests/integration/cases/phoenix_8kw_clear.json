@@ -1,0 +1,79 @@
+{
+  "name": "phoenix_8kw_clear",
+  "description": "Phoenix, AZ — single-array 8 kW DC south at 30° tilt. High-irradiance baseline; production-only validation against PVWatts v8 (no tariff / finance yet). Lat/lon = Sky Harbor airport area, the canonical TMY3 station.",
+  "inputs": {
+    "system": {
+      "lat": 33.4484,
+      "lon": -112.074,
+      "dc_kw": 8.0,
+      "tilt_deg": 30.0,
+      "azimuth_deg": 180.0
+    },
+    "financial": {},
+    "tariff": {}
+  },
+  "oracle": {
+    "production": {
+      "source": "pvwatts_v8",
+      "endpoint": "https://developer.nlr.gov/api/pvwatts/v8.json",
+      "fetched_at": "2026-05-02T19:36:04.941716Z",
+      "requests": [
+        {
+          "lat": 33.4484,
+          "lon": -112.074,
+          "system_capacity_kw": 8.0,
+          "azimuth": 180.0,
+          "tilt": 30.0,
+          "array_type": 1,
+          "module_type": 0,
+          "losses_pct": 14.0,
+          "dataset": "tmy3"
+        }
+      ],
+      "responses": [
+        {
+          "ac_annual_kwh": 14126.18693901232,
+          "ac_monthly_kwh": [
+            998.9667857906046,
+            989.5673905124586,
+            1192.333578642005,
+            1336.959788096395,
+            1343.87004096436,
+            1270.647504432918,
+            1245.092349562729,
+            1273.404164257743,
+            1243.484389756215,
+            1167.658910702439,
+            1067.523134324745,
+            996.6789019697343
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "engine.dc_production.annual_ac_kwh": {
+      "kind": "scalar",
+      "value": 14126.18693901232,
+      "tol_pct": 5.0
+    },
+    "engine.dc_production.monthly_ac_kwh": {
+      "kind": "vector",
+      "values": [
+        998.9667857906046,
+        989.5673905124586,
+        1192.333578642005,
+        1336.959788096395,
+        1343.87004096436,
+        1270.647504432918,
+        1245.092349562729,
+        1273.404164257743,
+        1243.484389756215,
+        1167.658910702439,
+        1067.523134324745,
+        996.6789019697343
+      ],
+      "tol_pct": 8.0
+    }
+  }
+}

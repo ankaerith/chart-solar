@@ -1,0 +1,17 @@
+{
+  "name": "_sample",
+  "description": "Stub case for exercising the harness loader. The leading underscore tells `load_cases` to skip this file in production runs; `--case _sample` includes it explicitly. Inputs are minimum-viable — not a real forecast.",
+  "inputs": {
+    "system": {
+      "lat": 47.45,
+      "lon": -122.31,
+      "dc_kw": 8.0,
+      "tilt_deg": 30.0,
+      "azimuth_deg": 180.0
+    }
+  },
+  "oracle": {
+    "production": null
+  },
+  "expected": {}
+}
