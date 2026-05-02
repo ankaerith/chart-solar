@@ -134,8 +134,8 @@ async def test_claim_slot_treats_expired_winner_as_race_won(clean_tables: None) 
     # Plant an already-expired row (this is the only way to force the
     # race-fallback branch deterministically).
     async with _db.SessionLocal() as session:
-        await session.execute(
-            IdempotencyKey.__table__.insert().values(
+        session.add(
+            IdempotencyKey(
                 route=route,
                 key=key,
                 request_hash="hash-old",
@@ -164,7 +164,7 @@ async def test_claim_slot_treats_expired_winner_as_race_won(clean_tables: None) 
 
 async def test_stripe_replay_records_event_once(clean_tables: None) -> None:
     """A webhook delivered twice must grant the entitlement exactly once."""
-    payload = {"id": "evt_123", "type": "checkout.session.completed"}
+    payload: dict[str, object] = {"id": "evt_123", "type": "checkout.session.completed"}
     grants: list[str] = []
 
     async def handle(event_id: str, event_type: str, body: dict[str, object]) -> None:
