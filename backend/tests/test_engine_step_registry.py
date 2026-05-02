@@ -1,15 +1,11 @@
 """Step-registry audit: every Phase-1a engine step exposes its canonical
 entry point under an ``engine.<step>`` feature key.
 
-This is a registry-completeness check, not a behavioural one. The bead
-behind this test (chart-solar-nbwe) tracks an explicit list of step
-keys the pipeline expects to be able to look up. ADR 0006 supersedes
-``engine.cell_temperature`` and ``engine.clipping`` (handled inside
-``engine.dc_production`` by pvlib's ModelChain), and parks
+This is a registry-completeness check, not a behavioural one. ADR 0006
+supersedes ``engine.cell_temperature`` and ``engine.clipping`` (handled
+inside ``engine.dc_production`` by pvlib's ModelChain), and parks
 ``engine.soiling`` until pvlib's HSU model gets PM2.5 / PM10 columns
-on ``TmyData`` (chart-solar-743). ``engine.snow`` graduated to
-``EXPECTED_KEYS`` once the ERA5-Land sibling lookup landed monthly
-snowfall + RH on every supported provider (chart-solar-9ji).
+on ``TmyData``.
 """
 
 from __future__ import annotations
@@ -26,10 +22,9 @@ EXPECTED_KEYS: set[str] = {
     "engine.finance",
 }
 
-# Per ADR 0006 (and its supersession of chart-solar-5qe / chart-solar-p9l),
-# these steps must NOT register a top-level entry point: the physics is
-# inside `engine.dc_production`'s ModelChain run, and a separate step
-# would either no-op or double-count.
+# Per ADR 0006, these steps must NOT register a top-level entry point:
+# the physics is inside `engine.dc_production`'s ModelChain run, and a
+# separate step would either no-op or double-count.
 SUPERSEDED_KEYS: set[str] = {
     "engine.cell_temperature",
     "engine.clipping",

@@ -25,14 +25,14 @@ import numpy as np
 import pvlib.snow
 from pydantic import BaseModel, Field
 
-from backend.domain.tmy import HOURS_PER_TMY, TmyData
-from backend.engine.inputs import SystemInputs
-from backend.engine.registry import register
-from backend.engine.steps._calendar import (
+from backend.domain.calendar import (
     aggregate_hourly_to_monthly_mean,
     aggregate_hourly_to_monthly_sum,
     apply_monthly_factors,
 )
+from backend.domain.tmy import HOURS_PER_TMY, TmyData
+from backend.engine.inputs import SystemInputs
+from backend.engine.registry import register
 from backend.engine.steps.dc_production import DcProductionResult
 
 #: Average centimetres of snow per "snow event" — Townsend's model

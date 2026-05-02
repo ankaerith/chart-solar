@@ -1,4 +1,4 @@
-"""Snow loss step (chart-solar-9ji): pvlib Townsend monthly model.
+"""Snow loss step: pvlib Townsend monthly model.
 
 Covers the four behaviours the pipeline depends on:
 
