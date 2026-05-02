@@ -26,7 +26,7 @@ HOURS_PER_TMY = 8760
 
 #: TMY anchor year. Non-leap (so the calendar is exactly 8760 hours)
 #: and stable across calls — TmyData arrays are indexed against this
-#: anchor in UTC, then localized at consumption time.
+#: anchor at local midnight Jan 1 of the location's timezone.
 TMY_ANCHOR_YEAR = 2023
 
 
@@ -54,15 +54,23 @@ def tmy_hour_calendar() -> tuple[tuple[int, bool, int], ...]:
 def tmy_datetime_index(timezone: str) -> pd.DatetimeIndex:
     """8760-hour DatetimeIndex localised to ``timezone``.
 
-    Anchored at ``TMY_ANCHOR_YEAR-01-01 00:00 UTC`` and converted to the
-    requested IANA zone — pvlib's ModelChain insists on a tz-aware
-    index, and the synthetic-TMY clear-sky calls need the same shape.
-    Built per call because the pandas index carries a timezone in its
-    state; callers in tight loops should hoist the result.
+    Anchored at **local** ``TMY_ANCHOR_YEAR-01-01 00:00`` in the requested
+    IANA zone — pvlib's ModelChain insists on a tz-aware index, and the
+    synthetic-TMY clear-sky calls need the same shape. Built per call
+    because the pandas index carries a timezone in its state; callers in
+    tight loops should hoist the result.
+
+    The index must be **local-time-anchored**: TMY arrays from every
+    adapter (NSRDB requests ``utc=false``; PVGIS / Open-Meteo follow the
+    same convention) place row 0 at local midnight Jan 1, not UTC
+    midnight. Anchoring the index in UTC and ``tz_convert``-ing offsets
+    every row by the timezone's UTC offset, putting solar noon out of
+    phase with the irradiance peak — see chart-solar-9xi4.
     """
-    base = datetime(TMY_ANCHOR_YEAR, 1, 1, 0, tzinfo=UTC)
-    naive_hours = [base + timedelta(hours=i) for i in range(HOURS_PER_TMY)]
-    return pd.DatetimeIndex(naive_hours).tz_convert(timezone)
+    naive = pd.DatetimeIndex(
+        [datetime(TMY_ANCHOR_YEAR, 1, 1, 0) + timedelta(hours=i) for i in range(HOURS_PER_TMY)]
+    )
+    return naive.tz_localize(timezone, ambiguous=False, nonexistent="shift_forward")
 
 
 class TmyData(BaseModel):
