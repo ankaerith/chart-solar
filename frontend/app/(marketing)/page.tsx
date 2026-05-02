@@ -1,19 +1,25 @@
+import { Eyebrow, Panel } from "@/components/ui";
+import { PageContainer } from "@/components/layout";
+
+// Placeholder landing — the real Hero / mode-strip / pricing / etc. land in
+// later beads (chart-solar-4ef, sf7, …). For now, the page demonstrates the
+// marketing-route chrome (NavBar + SunBackdrop + Footer from the layout)
+// and surfaces the design-token preview that pre-existed on this route.
+
 export default function Home() {
   return (
-    <main className="mx-auto max-w-3xl space-y-10 px-8 py-16">
+    <PageContainer className="space-y-10 py-16">
       <header className="space-y-3">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-accent-2">
-          <span className="mr-3 inline-block h-px w-6 align-middle bg-accent-2" />
-          Solstice · Ink
-        </p>
+        <Eyebrow>Solstice · Ink</Eyebrow>
         <h1 className="text-5xl">Chart Solar</h1>
-        <p className="text-lg text-ink-dim">
-          Plan it. Check it. Track it. — the honest math for your roof, before, during, and after.
+        <p className="max-w-2xl text-lg text-ink-dim">
+          Plan it. Check it. Track it. — the honest math for your roof, before,
+          during, and after.
         </p>
       </header>
 
-      <section className="rounded-md border border-rule bg-panel p-6 space-y-4">
-        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-dim">
+      <Panel className="space-y-4">
+        <p className="font-mono text-[11px] tracking-[0.18em] text-ink-dim uppercase">
           Token preview
         </p>
         <div className="grid grid-cols-3 gap-3 text-sm">
@@ -30,12 +36,13 @@ export default function Home() {
         <p className="font-mono text-sm text-ink-dim">
           $/W · 8,760h · NPV · IRR — numerics in IBM Plex Mono
         </p>
-      </section>
+      </Panel>
 
       <p className="text-sm text-ink-faint">
-        Phase 0: scaffold. See <code className="font-mono">PRODUCT_PLAN.md</code> for what comes next.
+        Phase 0: scaffold. See{" "}
+        <code className="font-mono">PRODUCT_PLAN.md</code> for what comes next.
       </p>
-    </main>
+    </PageContainer>
   );
 }
 

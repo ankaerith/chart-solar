@@ -1,6 +1,6 @@
 export { Arrow } from "./arrow";
-export { Btn } from "./btn";
-export type { BtnProps } from "./btn";
+export { Btn, BtnLink } from "./btn";
+export type { BtnLinkProps, BtnProps } from "./btn";
 export { DemoWatermark } from "./demo-watermark";
 export { Eyebrow } from "./eyebrow";
 export { Field } from "./field";
