@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:i18n": "bash ../scripts/check-i18n.sh ."
   },
   "dependencies": {
     "next": "16.2.4",

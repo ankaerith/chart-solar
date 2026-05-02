@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Inter, Newsreader, Source_Serif_4 } from "next/font/google";
+import { LocaleProvider } from "@/lib/intl";
 import "./globals.css";
 
 const newsreader = Newsreader({
@@ -41,7 +42,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       data-theme="solstice-ink"
       className={`${newsreader.variable} ${inter.variable} ${ibmPlexMono.variable} ${sourceSerif.variable}`}
     >
-      <body className="min-h-screen bg-bg text-ink antialiased">{children}</body>
+      <body className="min-h-screen bg-bg text-ink antialiased">
+        <LocaleProvider value="en-US">{children}</LocaleProvider>
+      </body>
     </html>
   );
 }
