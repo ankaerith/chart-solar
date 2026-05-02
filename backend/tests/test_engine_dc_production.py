@@ -17,15 +17,20 @@ reference fixture lands (see chart-solar-b9z).
 from __future__ import annotations
 
 import math
+from datetime import datetime, timedelta
 
+import pandas as pd
 import pytest
+from pvlib.location import Location
 
+from backend.domain.tmy import TmyData, tmy_datetime_index
 from backend.engine.inputs import SystemInputs
 from backend.engine.steps.dc_production import (
     DEFAULT_DC_AC_RATIO,
     DcProductionResult,
     run_dc_production,
 )
+from backend.infra.util import utc_now
 from backend.providers.fake import synthetic_tmy
 from backend.providers.irradiance import HOURS_PER_TMY
 
@@ -171,6 +176,87 @@ def test_temperature_derate_lowers_output() -> None:
     base = run_dc_production(system=_system(), tmy=hot_tmy, gamma_pdc=-0.003)
     steeper = run_dc_production(system=_system(), tmy=hot_tmy, gamma_pdc=-0.005)
     assert steeper.annual_ac_kwh < base.annual_ac_kwh
+
+
+def _local_aligned_clearsky_tmy(*, lat: float, lon: float, tz: str) -> TmyData:
+    """Build a TMY whose row i is clear-sky irradiance at *local* hour i.
+
+    ``tmy_datetime_index`` is the helper under test in the regression below,
+    so the test can't use it to construct fixture data — the misalignment
+    would cancel out (which is exactly why the synthetic-fake-provider
+    tests above didn't catch chart-solar-9xi4). This helper anchors the
+    index explicitly via ``tz_localize`` of naive wall-clock hours,
+    matching real-adapter semantics: row 0 = local midnight Jan 1.
+    """
+    naive = pd.DatetimeIndex(
+        [datetime(2023, 1, 1, 0) + timedelta(hours=i) for i in range(HOURS_PER_TMY)]
+    )
+    idx = naive.tz_localize(tz)
+    cs = Location(latitude=lat, longitude=lon, tz=tz, altitude=300.0).get_clearsky(
+        idx, model="ineichen"
+    )
+    return TmyData(
+        lat=lat,
+        lon=lon,
+        elevation_m=300.0,
+        timezone=tz,
+        source="nsrdb",
+        fetched_at=utc_now(),
+        ghi_w_m2=[float(v) for v in cs["ghi"].tolist()],
+        dni_w_m2=[float(v) for v in cs["dni"].tolist()],
+        dhi_w_m2=[float(v) for v in cs["dhi"].tolist()],
+        temp_air_c=[20.0] * HOURS_PER_TMY,
+        wind_speed_m_s=[1.0] * HOURS_PER_TMY,
+    )
+
+
+def test_solar_noon_aligns_with_irradiance_peak_local_data() -> None:
+    """Regression for chart-solar-9xi4.
+
+    Real adapters (NSRDB ``utc=false``, PVGIS, Open-Meteo) return TMY rows
+    aligned to local wall-clock hours: row 12 = local-noon irradiance,
+    row 0 = local midnight. The engine's index builder must agree with
+    that convention — anchoring in UTC and ``tz_convert``-ing offsets
+    every row by the timezone's UTC offset, putting solar noon out of
+    phase with the irradiance peak. The bug under-produced by 50–84 %
+    depending on offset magnitude.
+
+    The synthetic-fake-provider tests above don't catch this because
+    fake-TMY uses the same index helper for clear-sky generation that
+    ModelChain uses — any misalignment cancels out. This test builds
+    fixture TMYs via ``_local_aligned_clearsky_tmy`` so the row indexing
+    is *independent* of ``tmy_datetime_index``.
+    """
+    phoenix = run_dc_production(
+        system=_system(lat=33.4484, lon=-112.0740, tilt_deg=30.0, azimuth_deg=180.0),
+        tmy=_local_aligned_clearsky_tmy(lat=33.4484, lon=-112.0740, tz="Etc/GMT+7"),
+    )
+    boston = run_dc_production(
+        system=_system(lat=42.3601, lon=-71.0589, tilt_deg=30.0, azimuth_deg=180.0),
+        tmy=_local_aligned_clearsky_tmy(lat=42.3601, lon=-71.0589, tz="Etc/GMT+5"),
+    )
+    san_diego = run_dc_production(
+        system=_system(lat=32.7157, lon=-117.1611, tilt_deg=30.0, azimuth_deg=180.0),
+        tmy=_local_aligned_clearsky_tmy(lat=32.7157, lon=-117.1611, tz="Etc/GMT+8"),
+    )
+
+    # Phoenix clear-sky must clear the physical floor; bug returned ~550.
+    assert phoenix.annual_ac_kwh / 8.0 >= 1_500
+
+    # Climate ordering: bug specifically inverted this (Boston > Phoenix).
+    assert phoenix.annual_ac_kwh > boston.annual_ac_kwh
+    assert san_diego.annual_ac_kwh > boston.annual_ac_kwh
+
+
+def test_tmy_datetime_index_is_anchored_at_local_midnight() -> None:
+    """Row 0 must be local midnight Jan 1, not Dec 31 17:00 (chart-solar-9xi4)."""
+    idx = tmy_datetime_index("Etc/GMT+7")
+    assert idx[0].year == 2023
+    assert idx[0].month == 1
+    assert idx[0].day == 1
+    assert idx[0].hour == 0
+    assert idx[12].hour == 12
+    assert len(idx) == 8760
 
 
 def test_step_registers_under_engine_dc_production_key() -> None:
