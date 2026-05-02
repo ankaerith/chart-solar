@@ -17,7 +17,8 @@ Closes `chart-solar-…`
 - [ ] PII / user-scoped data: passes through `require_owner`; row-level access enforced at API layer
 - [ ] License-relevant additions: `pip-licenses` clean (no AGPL/SSPL/Commons Clause); attribution added to `/credits` if new data source
 - [ ] LLM prompt changes: prompt version bumped; snapshot pinned; eval-set delta noted (post-MVP)
-- [ ] User-facing copy: matches voice ("named practices, never named companies"); disclaimer present where required
+- [ ] User-facing copy: matches voice ("named practices, never named companies"); disclaimer present where required (`docs/EDITORIAL.md`)
+- [ ] UI changes: design ref on the bead points to the implemented mock (`design/solar-decisions/project/*.jsx`); deviations called out in the PR body
 - [ ] Bead acceptance criteria each addressed in this PR or a linked follow-up bead
 
 ## ADR
