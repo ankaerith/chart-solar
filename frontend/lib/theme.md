@@ -71,3 +71,37 @@ Display weight is 600, tracking `-0.022em` (`--display-weight`, `--display-track
 ## Why a single locked theme
 
 `solar-decisions/project/themes.jsx` ships Solstice·Ink as the locked editorial direction — cool oyster paper, prussian-blue ink, oxblood secondary, with Newsreader/Inter/IBM Plex Mono. We honour that at v1: no dark mode, no theme picker, no per-tenant skinning. Tokenizing now keeps a future theme switch a single `data-theme` attribute swap.
+
+## shadcn mapping
+
+`components.json` is configured (`style: new-york`, `tailwind.cssVariables: true`, alias `@/components/ui`). The shadcn CSS-variable contract is aliased to Solstice·Ink tokens in `app/globals.css` so any primitive added via `npx shadcn add …` inherits the editorial look without per-component CSS:
+
+| shadcn var                | Solstice·Ink source | Notes                                              |
+|---------------------------|---------------------|----------------------------------------------------|
+| `--background` / `--foreground` | `--bg` / `--ink`           | Page canvas + primary type                |
+| `--card` / `--card-foreground` | `--panel` / `--ink`         | Cards (= our Panel)                       |
+| `--popover` / `--popover-foreground` | `--panel` / `--ink`   | Popovers, dropdowns                       |
+| `--primary` / `--primary-foreground` | `--ink` / `--bg`      | Matches our Btn primary (ink-on-bg)        |
+| `--secondary` / `--secondary-foreground` | `--panel-2` / `--ink-2` | Recessed surfaces                      |
+| `--muted` / `--muted-foreground` | `--panel-2` / `--ink-dim`   | Muted backgrounds + tertiary type         |
+| `--accent-foreground`     | `--accent-ink`       | Type on accent surfaces                            |
+| `--destructive` / `--destructive-foreground` | `--bad` / `--accent-ink` | Destructive actions                |
+| `--border`                | `--rule`             | Default hairlines                                  |
+| `--input`                 | `--rule-strong`      | Input borders (matches design `border: 1px solid var(--rule-strong)`) |
+| `--ring`                  | `--accent`           | Focus ring (prussian blue)                         |
+
+### Conflict: `--accent`
+
+Our brand `--accent` (`#1d3461` prussian blue) collides with the shadcn convention where `--accent` is the *hover/highlight* background — too loud as a hover. We keep our brand semantics for `--accent` (the SD design uses prussian blue as a deliberate, sparing accent, not a hover state). When a shadcn primitive that hard-codes `bg-accent` for hover is adopted, override the hover to `bg-panel-2` at the call site.
+
+### What we install vs. build bespoke
+
+The Solstice·Ink design (`design/solar-decisions/project/ui.jsx`) ships **bespoke primitives** — `Btn`, `Eyebrow`, `MonoLabel`, `Panel`, `Field`, `TextInput`, `SegBtn`, `Wordmark`, `Modal`, `Footnote`, `DemoWatermark` — all with editorial-specific styling (mono labels, ink/oyster surfaces, prussian-blue accents). These are ported by hand under [`bd show chart-solar-bdi`](#) into `frontend/components/ui/`, **not** scaffolded from shadcn.
+
+shadcn primitives we may pull in later when needed (no upfront install — keeps the dependency surface honest):
+
+- **`dialog`** — could underly the Modal primitive's a11y plumbing (focus trap, scroll lock, Esc handler) once we adopt it as intercepting routes (`bd show chart-solar-2hf.1`). For now the bespoke Modal in `bdi` covers it.
+- **`dropdown-menu`** — for the nav profile menu (`bd show chart-solar-dzl`).
+- **`select`** / **`popover`** / **`tooltip`** — adopt as specific beads need them.
+
+Rule: **don't pre-install shadcn primitives speculatively.** Add only when a bead needs one, and theme-tweak at adoption time.
