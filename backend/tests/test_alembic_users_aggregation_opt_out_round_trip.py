@@ -12,7 +12,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 OPT_OUT_REVISION_ID = "c4d2e1a8b9f3"
-PARENT_REVISION_ID = "a8b2c4d6e9f1"
+PARENT_REVISION_ID = "b3c2d1e8f9a4"
 
 
 @pytest.fixture(scope="module")

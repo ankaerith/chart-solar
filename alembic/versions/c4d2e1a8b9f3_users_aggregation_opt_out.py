@@ -1,7 +1,7 @@
 """users.aggregation_opt_out column
 
 Revision ID: c4d2e1a8b9f3
-Revises: a8b2c4d6e9f1
+Revises: b3c2d1e8f9a4
 Create Date: 2026-05-01 19:00:00.000000
 
 Adds the per-user opt-out flag introduced in
@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "c4d2e1a8b9f3"
-down_revision: str | Sequence[str] | None = "a8b2c4d6e9f1"
+down_revision: str | Sequence[str] | None = "b3c2d1e8f9a4"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
