@@ -168,7 +168,7 @@ def script() -> ScriptDirectory:
 
     Session-scoped — every test_alembic_*_round_trip.py file just reads
     the chain, no per-test mutation. Sharing one ``ScriptDirectory``
-    across the suite saves seven disk walks of ``alembic/versions/``.
+    across the suite avoids re-walking ``alembic/versions/`` per file.
     Pair with ``backend.tests._alembic.assert_revision_in_chain``.
     """
     cfg = Config("alembic.ini")
