@@ -35,8 +35,18 @@ Configuration lives in `.env` (see [`docs/SECRETS.md`](docs/SECRETS.md) for prod
 ## Engineering docs
 
 - [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — Definition of Done, repo layout, testing strategy, operational expectations.
+- [`docs/EDITORIAL.md`](docs/EDITORIAL.md) — voice + house rules for the [Field Notes](#frontend-design-and-content) editorial section.
+- [`docs/SECRETS.md`](docs/SECRETS.md) — env vars, rotation cadence, deploy targets.
 - [`docs/adr/`](docs/adr/) — Architecture Decision Records (Phase 1 closed decisions and beyond).
+- [`docs/reviews/`](docs/reviews/) — backend review reports (security / code quality / architecture) and the issues filed from them.
 - [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) — PR checklist mirroring DoD.
+
+## Frontend design and content
+
+- [`design/solar-decisions/`](design/solar-decisions/) — handoff bundle from Claude Design. HTML/JSX prototypes for every screen (landing, wizard, results, audit, pricing, library, Field Notes), chat transcripts capturing the design iteration, hero-art exploration. The JSX is the visual + behavioral contract; reimplement in TS/React, don't port file structure. Start with the bundle's [`README.md`](design/solar-decisions/README.md).
+- [`frontend/content/notes/`](frontend/content/notes/) — Field Notes editorial blog. MDX, statically generated. Style guide at [`docs/EDITORIAL.md`](docs/EDITORIAL.md).
+
+UI beads carry a `Design` field pointing to the relevant `design/solar-decisions/project/*.jsx:line` range — `bd show <id>` to see it.
 
 ## Next
 

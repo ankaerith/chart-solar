@@ -72,8 +72,11 @@ For the frontend, the equivalents are `bun run lint`, `bun run typecheck`, `bun 
 - **Engineering spec**: [`PRODUCT_PLAN.md`](PRODUCT_PLAN.md) — features, architecture, phased roadmap, verification.
 - **Legal**: [`LEGAL_CONSIDERATIONS.md`](LEGAL_CONSIDERATIONS.md) — data sources, IP, AUP, retention.
 - **Engineering practices**: [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — Definition of Done, repo layout, testing, ops.
+- **Editorial style guide**: [`docs/EDITORIAL.md`](docs/EDITORIAL.md) — voice, headlines, citations, AI-assist disclosure for [`/notes/*`](frontend/content/notes/) (Field Notes blog).
 - **Secret management**: [`docs/SECRETS.md`](docs/SECRETS.md) — env vars, rotation cadence, deploy targets.
 - **Architecture decisions**: [`docs/adr/`](docs/adr/) — read the index in `README.md`. Don't edit accepted ADRs in place; supersede.
+- **Backend reviews**: [`docs/reviews/`](docs/reviews/) — multi-lens review reports (security / code quality / architecture) and the issues filed from them.
+- **Frontend design source of truth**: [`design/solar-decisions/`](design/solar-decisions/) — handoff bundle from Claude Design (HTML/JSX prototypes, chat transcripts, hero-art iterations). See its [`README.md`](design/solar-decisions/README.md). The JSX is the visual + behavioral contract; reimplement in TS/React, don't copy file structure.
 - **PR checklist**: [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
 - **Tasks + memory**: `bd ready`, `bd show <id>`, `bd memories <keyword>`.
 
@@ -86,6 +89,54 @@ For the frontend, the equivalents are `bun run lint`, `bun run typecheck`, `bun 
 ## Architecture in one paragraph
 
 FastAPI (Python) backend, Next.js 16 (App Router, React 19) frontend, Postgres for state, Redis + RQ for the forecast queue, pvlib for production physics, Vertex AI Gemini for PDF extraction (Phase 1b). Deployed as containers; specific host is undecided and the stack stays portable — no provider-proprietary features in the hot path.
+
+## Frontend conventions
+
+- **Theme**: Solstice·Ink — locked in. Newsreader serif display, Inter body, IBM Plex Mono for numerics. Tokens in [`frontend/app/globals.css`](frontend/app/globals.css); reference palette in [`design/solar-decisions/project/themes.jsx`](design/solar-decisions/project/themes.jsx).
+- **Route groups**: `app/(marketing)/` for SEO surfaces (`/`, `/pricing`, `/methodology`, `/notes/*`) — Server Components, prerendered. `app/(app)/` for product flows (`/forecast`, `/audit`, `/library`, `/results`) — auth-gated, mostly client.
+- **Modals as routes**: sign-in / checkout / save-forecast / magic-sent are intercepting parallel routes (`@modal/(.)signin/page.tsx` etc.), not in-component conditionals — bookmarkable, refresh-safe, browser-back closes naturally. See [`bd show chart-solar-2hf.1`](#) for the pattern.
+- **Editorial blog**: MDX in `frontend/content/notes/`, statically generated. House rules in [`docs/EDITORIAL.md`](docs/EDITORIAL.md). Visual contract in [`design/solar-decisions/project/screen-notes.jsx`](design/solar-decisions/project/screen-notes.jsx).
+- **Charts**: Recharts. SSR-render a deterministic-seed SVG fallback so first paint is non-blank and crawlers see content; hydrate the interactive version over it.
+
+## Beads → mock anchors
+
+Frontend beads carry a `Design` field pointing to specific files and line ranges in [`design/solar-decisions/project/`](design/solar-decisions/project/). When implementing a UI bead, run `bd show <id>` and read the design ref before opening any code. The mock is the visual + behavioral contract; the bead description is the engineering scope.
+
+## UI validation with agent-browser
+
+`agent-browser` is the canonical tool for **UI troubleshooting** (debugging a layout issue, reproducing a frontend bug, verifying a fix) and for **layout verification at the end of significant frontend work** (every PR that touches a route under `app/`). Don't ship UI changes without driving them through agent-browser at least once.
+
+Standard loop:
+
+1. Boot the dev server: `cd frontend && bun --bun run dev` (use `bun --bun` to force bun's runtime — system Node may be < 20.9 and `bun run dev` will fail if so).
+2. Drive: `agent-browser open …` → `snapshot -i` → `screenshot path.png` → `console` / `errors`. The accessibility tree exposes `@eN` refs you can `click @e1` / `type @e3 "alice@example.com"` against.
+3. For visual regression: `diff screenshot --baseline` against a checked-in baseline, or `diff snapshot` for accessibility-tree drift.
+
+**Linux ARM64 caveat** — Chrome for Testing has no ARM64 builds and `agent-browser open` will hang trying to auto-launch the snap chromium. Workaround: launch chromium yourself and connect via the WebSocket URL.
+
+```bash
+/snap/bin/chromium --headless=new --no-sandbox --disable-gpu \
+    --remote-debugging-port=9222 --user-data-dir=/tmp/cd about:blank &
+WS=$(curl -s http://127.0.0.1:9222/json/version | jq -r .webSocketDebuggerUrl)
+agent-browser connect "$WS"
+# from here, open / snapshot / click / type / screenshot all work normally
+```
+
+Cleanup at end of session: `agent-browser close --all` and kill the chromium PID. `file://` URLs don't work under snap chromium; serve via `python3 -m http.server` if you need a static HTML probe.
+
+Run `agent-browser skills get core --full` for the complete command reference.
+
+## When work is "significant" enough to validate
+
+A frontend change is significant — and needs an agent-browser pass before the PR is opened — if any of the following are true:
+
+- Adds or modifies a route under `app/`.
+- Touches a shared layout, nav, or footer component.
+- Changes theme tokens, fonts, or globals.css.
+- Modifies a chart, illustration, or other visual component.
+- Touches an MDX article or the editorial layout.
+
+For each modified route, capture: a screenshot, an accessibility-tree snapshot, and a clean `console`/`errors` check. Attach screenshots to the PR or note "validated via agent-browser, no console/errors regressions" in the PR body. Type-checking and tests verify code; agent-browser verifies the experience.
 
 ## Engine layout
 
