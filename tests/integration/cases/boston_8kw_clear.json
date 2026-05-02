@@ -1,0 +1,61 @@
+{
+  "name": "boston_8kw_clear",
+  "description": "Boston, MA — single-array 8 kW DC south at 30° tilt. Cold/snowy-winter baseline; production-only validation against PVWatts v8. The Townsend snow-loss step (`engine.snow`) layers on top once snow + RH columns are in TmyData; this case currently exercises only the bare PVWatts equivalence.",
+  "inputs": {
+    "system": {
+      "lat": 42.3601,
+      "lon": -71.0589,
+      "dc_kw": 8.0,
+      "tilt_deg": 30.0,
+      "azimuth_deg": 180.0
+    },
+    "financial": {},
+    "tariff": {}
+  },
+  "oracle": {
+    "production": {
+      "source": "pvwatts_v8",
+      "endpoint": "https://developer.nlr.gov/api/pvwatts/v8.json",
+      "fetched_at": "2026-05-02T20:19:01.736308Z",
+      "requests": [
+        {
+          "lat": 42.3601,
+          "lon": -71.0589,
+          "system_capacity_kw": 8.0,
+          "azimuth": 180.0,
+          "tilt": 30.0,
+          "array_type": 1,
+          "module_type": 0,
+          "losses_pct": 14.0,
+          "dataset": "tmy3"
+        }
+      ],
+      "responses": [
+        {
+          "ac_annual_kwh": 10603.4198759798,
+          "ac_monthly_kwh": [
+            631.4082417256973,
+            769.896428595923,
+            917.3024577778518,
+            953.2091139675492,
+            1099.877359541296,
+            1038.099234463136,
+            1135.9304139368,
+            1096.342198158585,
+            959.3789521150611,
+            821.271389921212,
+            615.9198315305505,
+            564.7842542461256
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "artifacts/engine.dc_production/annual_ac_kwh": {
+      "kind": "scalar",
+      "value": 10603.4198759798,
+      "tol_pct": 5.0
+    }
+  }
+}

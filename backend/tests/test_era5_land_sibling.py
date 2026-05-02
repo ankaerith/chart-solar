@@ -108,7 +108,7 @@ async def test_nsrdb_fetch_merges_sibling_precip_and_snow(
 
     def handler(req: httpx.Request) -> httpx.Response:
         host = req.url.host
-        if "developer.nrel.gov" in host:
+        if "developer.nlr.gov" in host:
             return httpx.Response(200, text=csv_text)
         if "archive-api.open-meteo.com" in host:
             return httpx.Response(200, json=daily_payload)
@@ -137,7 +137,7 @@ async def test_nsrdb_fetch_continues_when_sibling_fails(
     csv_text = _synthetic_nsrdb_csv(include_rh=True)
 
     def handler(req: httpx.Request) -> httpx.Response:
-        if "developer.nrel.gov" in req.url.host:
+        if "developer.nlr.gov" in req.url.host:
             return httpx.Response(200, text=csv_text)
         return httpx.Response(503, text="sibling boom")
 
@@ -160,7 +160,7 @@ async def test_nsrdb_fetch_skips_sibling_when_sibling_disabled(
     csv_text = _synthetic_nsrdb_csv(include_rh=True)
 
     def handler(req: httpx.Request) -> httpx.Response:
-        if "developer.nrel.gov" in req.url.host:
+        if "developer.nlr.gov" in req.url.host:
             return httpx.Response(200, text=csv_text)
         raise AssertionError("sibling endpoint should not be called")
 

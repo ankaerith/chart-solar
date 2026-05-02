@@ -1,0 +1,61 @@
+{
+  "name": "san_diego_8kw_clear",
+  "description": "San Diego, CA — single-array 8 kW DC south at 22° tilt (typical SoCal roof pitch). Coastal-temperate baseline; production-only validation against PVWatts v8. NEM 3.0 NBT tariff validation is deferred until export-credit cases land.",
+  "inputs": {
+    "system": {
+      "lat": 32.7157,
+      "lon": -117.1611,
+      "dc_kw": 8.0,
+      "tilt_deg": 22.0,
+      "azimuth_deg": 180.0
+    },
+    "financial": {},
+    "tariff": {}
+  },
+  "oracle": {
+    "production": {
+      "source": "pvwatts_v8",
+      "endpoint": "https://developer.nlr.gov/api/pvwatts/v8.json",
+      "fetched_at": "2026-05-02T20:19:01.100918Z",
+      "requests": [
+        {
+          "lat": 32.7157,
+          "lon": -117.1611,
+          "system_capacity_kw": 8.0,
+          "azimuth": 180.0,
+          "tilt": 22.0,
+          "array_type": 1,
+          "module_type": 0,
+          "losses_pct": 14.0,
+          "dataset": "tmy3"
+        }
+      ],
+      "responses": [
+        {
+          "ac_annual_kwh": 13144.81864053343,
+          "ac_monthly_kwh": [
+            850.3245831929786,
+            883.3637502874518,
+            1102.151859827326,
+            1196.350808472248,
+            1235.188388614364,
+            1241.635178172525,
+            1331.917853676466,
+            1318.148738621319,
+            1185.99973240954,
+            1029.145844202425,
+            928.7921240821823,
+            841.7997789745892
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "artifacts/engine.dc_production/annual_ac_kwh": {
+      "kind": "scalar",
+      "value": 13144.81864053343,
+      "tol_pct": 5.0
+    }
+  }
+}
