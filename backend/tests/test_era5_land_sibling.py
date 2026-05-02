@@ -1,33 +1,48 @@
-"""NSRDB-1985 sibling adapter (chart-solar-qrhs).
+"""ERA5-Land sibling adapter — NSRDB integration (chart-solar-qrhs).
 
 Covers the parser (synthetic Open-Meteo daily payload → 12-month
 aggregates) and the integration shape: ``NsrdbProvider.fetch_tmy``
 merges the sibling's monthly precip + snowfall onto the PSM3 TMY, and a
-sibling failure logs but doesn't break the primary fetch.
+sibling failure logs but doesn't break the primary fetch. The PVGIS
+integration (chart-solar-p559) lives in
+``test_era5_land_pvgis_sibling.py``.
 """
 
 from __future__ import annotations
 
 import io
+from collections.abc import Iterator
 from datetime import date, timedelta
 from typing import Any
 
 import httpx
 import pytest
 
+from backend.infra.retry import reset_breakers
 from backend.providers.irradiance import HOURS_PER_TMY, TmyData
-from backend.providers.irradiance.nsrdb import NsrdbProvider
-from backend.providers.irradiance.nsrdb_1985 import (
-    Nsrdb1985Aggregates,
-    Nsrdb1985Provider,
-    parse_nsrdb_1985_payload,
+from backend.providers.irradiance.era5_land import (
+    Era5LandAggregates,
+    Era5LandProvider,
+    parse_era5_land_payload,
 )
+from backend.providers.irradiance.nsrdb import NsrdbProvider
+
+
+@pytest.fixture(autouse=True)
+def _reset_breakers() -> Iterator[None]:
+    """The ``era5_land`` breaker is module-level state shared across
+    every test in this file (and the PVGIS sibling file). Reset around
+    each test so a deliberate-failure case doesn't poison the next
+    test's success path."""
+    reset_breakers()
+    yield
+    reset_breakers()
 
 
 def test_parse_payload_aggregates_daily_precipitation_into_months() -> None:
     """1 mm/day → Jan 31, Feb 28, Apr 30 mm in a non-leap year."""
     payload = _synthetic_daily_payload(precipitation_per_day=1.0)
-    aggregates = parse_nsrdb_1985_payload(payload)
+    aggregates = parse_era5_land_payload(payload)
 
     assert aggregates.precipitation_mm_per_month is not None
     assert aggregates.precipitation_mm_per_month[0] == pytest.approx(31.0)
@@ -39,7 +54,7 @@ def test_parse_payload_aggregates_snowfall_into_winter_months_only() -> None:
     """Fixture: 0.5 cm/day in Jan/Feb/Dec, 0 elsewhere — matches the
     pattern the global-fallback OpenMeteo parser test pins."""
     payload = _synthetic_daily_payload(precipitation_per_day=0.0, snow_in_winter_cm=0.5)
-    aggregates = parse_nsrdb_1985_payload(payload)
+    aggregates = parse_era5_land_payload(payload)
 
     assert aggregates.snowfall_cm_per_month is not None
     assert aggregates.snowfall_cm_per_month[0] == pytest.approx(15.5)  # 31 × 0.5
@@ -51,7 +66,7 @@ def test_parse_payload_aggregates_snowfall_into_winter_months_only() -> None:
 def test_parse_payload_returns_none_when_daily_block_missing() -> None:
     """An older / cached payload without ``daily`` keeps both fields
     ``None`` so the engine soiling/snow steps no-op gracefully."""
-    aggregates = parse_nsrdb_1985_payload({"elevation": 0.0})
+    aggregates = parse_era5_land_payload({"elevation": 0.0})
     assert aggregates.precipitation_mm_per_month is None
     assert aggregates.snowfall_cm_per_month is None
 
@@ -60,7 +75,7 @@ def test_aggregates_validate_12_length() -> None:
     """The shared aggregate type pins a 12-length array — same as
     ``TmyData``'s monthly fields."""
     with pytest.raises(ValueError):
-        Nsrdb1985Aggregates(precipitation_mm_per_month=[1.0] * 11)
+        Era5LandAggregates(precipitation_mm_per_month=[1.0] * 11)
 
 
 async def test_provider_round_trips_through_mock_transport(
@@ -76,7 +91,7 @@ async def test_provider_round_trips_through_mock_transport(
     transport = httpx.MockTransport(handler)
     _patch_async_client(monkeypatch, transport)
 
-    provider = Nsrdb1985Provider()
+    provider = Era5LandProvider()
     aggregates = await provider.fetch_monthly_aggregates(40.0, -105.0)
 
     assert aggregates.precipitation_mm_per_month is not None
@@ -155,8 +170,8 @@ async def test_nsrdb_fetch_skips_sibling_when_sibling_disabled(
     _patch_async_client(monkeypatch, httpx.MockTransport(handler))
 
     class _NoOpSibling:
-        async def fetch_monthly_aggregates(self, lat: float, lon: float) -> Nsrdb1985Aggregates:
-            return Nsrdb1985Aggregates()
+        async def fetch_monthly_aggregates(self, lat: float, lon: float) -> Era5LandAggregates:
+            return Era5LandAggregates()
 
     provider = NsrdbProvider(api_key="x", user_email="x@x", sibling=_NoOpSibling())  # type: ignore[arg-type]
     tmy = await provider.fetch_tmy(40.0, -105.0)

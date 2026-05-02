@@ -13,9 +13,9 @@ Monthly aggregates: PSM3 carries hourly Relative Humidity, which we
 average into ``relative_humidity_pct_per_month`` so the soiling step
 can run on US sites without a sibling provider call. PSM3 does *not*
 carry surface precipitation or snowfall — those come from the
-``nsrdb_1985`` sibling adapter (chart-solar-qrhs), which the
-constructor accepts as a DI seam. ``Nsrdb1985Provider`` is the default;
-pass ``sibling=None`` (or one that raises) to skip the merge — both
+``era5_land`` sibling adapter (chart-solar-qrhs), which the
+constructor accepts as a DI seam. ``Era5LandProvider`` is the default;
+pass a sibling that returns empty aggregates to skip the merge — both
 fields stay ``None`` and the engine soiling / snow steps no-op the same
 way they did before the sibling existed.
 """
@@ -30,7 +30,7 @@ from backend.infra.http import make_get
 from backend.infra.util import utc_now
 from backend.providers.irradiance import HOURS_PER_TMY, IrradianceSource, TmyData
 from backend.providers.irradiance._aggregation import aggregate_hourly_to_monthly_mean
-from backend.providers.irradiance.nsrdb_1985 import Nsrdb1985Provider
+from backend.providers.irradiance.era5_land import Era5LandProvider
 
 NSRDB_PSM3_URL = "https://developer.nrel.gov/api/nsrdb/v2/solar/psm3-tmy-download.csv"
 NSRDB_ATTRIBUTES = "ghi,dni,dhi,air_temperature,wind_speed,surface_albedo,relative_humidity"
@@ -48,7 +48,7 @@ class NsrdbProvider:
         *,
         api_key: str | None,
         user_email: str | None,
-        sibling: Nsrdb1985Provider | None = None,
+        sibling: Era5LandProvider | None = None,
     ) -> None:
         # Stays constructable without credentials so DI wiring at app
         # startup doesn't blow up; `fetch_tmy` raises if actually called.
@@ -57,7 +57,7 @@ class NsrdbProvider:
         self._get = make_get(service="nsrdb")
         # ``sibling`` is omitted only by tests that want to verify the
         # PSM3-only path; production wiring always uses the default.
-        self._sibling = sibling if sibling is not None else Nsrdb1985Provider()
+        self._sibling = sibling if sibling is not None else Era5LandProvider()
 
     async def fetch_tmy(self, lat: float, lon: float) -> TmyData:
         if not self._api_key or not self._user_email:
@@ -82,7 +82,7 @@ class NsrdbProvider:
         return await self._merge_sibling(tmy, lat=lat, lon=lon)
 
     async def _merge_sibling(self, tmy: TmyData, *, lat: float, lon: float) -> TmyData:
-        """Augment the PSM3 TMY with the NSRDB-1985 sibling's monthly
+        """Augment the PSM3 TMY with the ERA5-Land sibling's monthly
         precipitation + snowfall, if the sibling responds.
 
         A sibling failure must not break the primary fetch — the
@@ -94,7 +94,7 @@ class NsrdbProvider:
             agg = await self._sibling.fetch_monthly_aggregates(lat, lon)
         except Exception:
             _logger.warning(
-                "nsrdb_1985 sibling fetch failed at (%.4f, %.4f); "
+                "era5_land sibling fetch failed at (%.4f, %.4f); "
                 "leaving precip + snow fields unset",
                 lat,
                 lon,
