@@ -9,6 +9,8 @@ mismatched-bucket bug can't slip into one adapter and silently diverge.
 
 from __future__ import annotations
 
+from datetime import date
+
 from backend.providers.irradiance import HOURS_PER_TMY
 
 #: Hours per month in a non-leap year, January-anchored. Mirrors the
@@ -70,8 +72,22 @@ def aggregate_daily_to_monthly_sum(
     return monthly
 
 
+def representative_archive_year() -> int:
+    """Anchor year for Open-Meteo / ERA5-Land archive requests.
+
+    Open-Meteo's archive lags by a few days, so the most recently
+    completed calendar year is the safe choice. Both the global-fallback
+    TMY (:mod:`backend.providers.irradiance.openmeteo`) and the ERA5-Land
+    sibling (:mod:`backend.providers.irradiance.era5_land`) read off the
+    same anchor — keep them aligned so cached responses can in principle
+    share a snapshot.
+    """
+    return date.today().year - 1
+
+
 __all__ = [
     "HOURS_PER_MONTH_NON_LEAP",
     "aggregate_daily_to_monthly_sum",
     "aggregate_hourly_to_monthly_mean",
+    "representative_archive_year",
 ]

@@ -11,10 +11,11 @@ default. We trust their selection — no UI knob for it at v1.
 
 Monthly aggregates: PVGIS's `RH` column populates
 ``relative_humidity_pct_per_month`` so the HSU soiling step runs on
-UK/EU sites without a sibling provider call. PVGIS doesn't carry
-surface precipitation or snowfall — those fields stay ``None``
-(option (b) in chart-solar-ifv8) and the snow / soiling-precip paths
-no-op gracefully. A future ERA5-Land sibling lookup can populate them.
+UK/EU sites without a sibling provider call. PVGIS does *not* carry
+surface precipitation or snowfall — those come from the ``era5_land``
+sibling adapter (chart-solar-p559) which the constructor accepts as a
+DI seam. The primary fetch and the sibling fetch run concurrently;
+sibling failure logs but doesn't break the audit.
 """
 
 from __future__ import annotations
@@ -25,6 +26,11 @@ from backend.infra.http import make_get
 from backend.infra.util import utc_now
 from backend.providers.irradiance import HOURS_PER_TMY, IrradianceSource, TmyData
 from backend.providers.irradiance._aggregation import aggregate_hourly_to_monthly_mean
+from backend.providers.irradiance.era5_land import (
+    Era5LandProvider,
+    Era5LandSibling,
+    fetch_aggregates_with_primary,
+)
 
 PVGIS_TMY_URL = "https://re.jrc.ec.europa.eu/api/v5_2/tmy"
 
@@ -34,10 +40,19 @@ class PvgisProvider:
 
     name: IrradianceSource = "pvgis"
 
-    def __init__(self) -> None:
+    def __init__(self, *, sibling: Era5LandSibling | None = None) -> None:
         self._get = make_get(service="pvgis")
+        self._sibling: Era5LandSibling = sibling if sibling is not None else Era5LandProvider()
 
     async def fetch_tmy(self, lat: float, lon: float) -> TmyData:
+        return await fetch_aggregates_with_primary(
+            self._sibling,
+            self._fetch_pvgis(lat, lon),
+            lat=lat,
+            lon=lon,
+        )
+
+    async def _fetch_pvgis(self, lat: float, lon: float) -> TmyData:
         response = await self._get(
             PVGIS_TMY_URL,
             params={

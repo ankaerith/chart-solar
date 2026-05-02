@@ -180,8 +180,10 @@ def test_parse_pvgis_json_aggregates_native_rh_into_monthly_mean() -> None:
 
 
 def test_parse_pvgis_json_leaves_precip_and_snow_unset() -> None:
-    """PVGIS doesn't carry precipitation or snowfall — option (b)
-    of chart-solar-ifv8: leave None, let the engine no-op."""
+    """PVGIS doesn't carry precipitation or snowfall — the parser
+    leaves those fields ``None``. The ERA5-Land sibling
+    (chart-solar-p559) populates them after the parse step; the
+    integration is covered in ``test_era5_land_pvgis_sibling``."""
     payload = _synthetic_pvgis_payload(
         hours=HOURS_PER_TMY,
         elevation=15.0,
