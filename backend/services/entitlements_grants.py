@@ -11,9 +11,17 @@ DO NOTHING`` so a re-delivered Stripe event collapses to a single row,
 even if the in-memory dedupe (``backend.infra.idempotency.record_stripe_event``)
 missed (e.g. cross-worker race or post-record crash before grant). The
 DB-level unique index is the source of truth.
+
+Identity validation: ``grant_tier`` accepts ``user_id`` as a string
+(events carry it as opaque text from Stripe metadata), parses it as a
+UUID, and lets the FK on ``user_entitlements.user_id`` reject grants
+for non-existent users. The Stripe metadata cannot mint a tier for a
+fabricated id this way.
 """
 
 from __future__ import annotations
+
+import uuid
 
 from sqlalchemy import case, desc, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -28,6 +36,20 @@ from backend.infra.util import utc_now
 _log = get_logger(__name__)
 
 
+def _parse_user_id(user_id: str) -> uuid.UUID | None:
+    """Coerce a string user id to UUID, or ``None`` if it does not parse.
+
+    Stripe metadata is opaque text. The webhook handler trusts whatever
+    the checkout flow stamped into ``client_reference_id`` /
+    ``metadata.user_id``; bad values must not reach the FK column where
+    a wrong-but-real UUID could grant a tier to the wrong user.
+    """
+    try:
+        return uuid.UUID(user_id)
+    except (ValueError, AttributeError):
+        return None
+
+
 async def grant_tier(
     session: AsyncSession,
     *,
@@ -38,20 +60,42 @@ async def grant_tier(
     """Grant ``tier`` to ``user_id`` from ``granted_by_event_id``.
 
     Returns True when a row was inserted, False on a replay (matching
-    ``granted_by_event_id`` already present). Callers that want to fan
+    ``granted_by_event_id`` already present), an unparseable ``user_id``,
+    or a non-existent user (FK rejection). Callers that want to fan
     out side effects only on first-grant can branch on the boolean.
     """
+    parsed_user_id = _parse_user_id(user_id)
+    if parsed_user_id is None:
+        _log.warning(
+            "entitlements.grant_rejected_invalid_user_id",
+            user_id=user_id,
+            tier=tier.value,
+            event_id=granted_by_event_id,
+        )
+        return False
+
     stmt = (
         pg_insert(UserEntitlement)
         .values(
-            user_id=user_id,
+            user_id=parsed_user_id,
             tier=tier.value,
             granted_by_event_id=granted_by_event_id,
         )
         .on_conflict_do_nothing(index_elements=["granted_by_event_id"])
         .returning(UserEntitlement.id)
     )
-    result = await session.execute(stmt)
+    try:
+        result = await session.execute(stmt)
+    except IntegrityError:
+        # FK rejection: user_id parsed but does not exist in users.
+        await session.rollback()
+        _log.warning(
+            "entitlements.grant_rejected_unknown_user",
+            user_id=user_id,
+            tier=tier.value,
+            event_id=granted_by_event_id,
+        )
+        return False
     inserted = result.scalar_one_or_none()
     await session.commit()
     if inserted is None:
@@ -86,10 +130,20 @@ async def revoke_by_event(
     matching (user, tier) also returns ``False``; the webhook still
     200s and the operator inspects the log.
     """
+    parsed_user_id = _parse_user_id(user_id)
+    if parsed_user_id is None:
+        _log.warning(
+            "entitlements.revoke_rejected_invalid_user_id",
+            user_id=user_id,
+            tier=tier.value,
+            event_id=revoked_by_event_id,
+        )
+        return False
+
     candidate_id = (
         select(UserEntitlement.id)
         .where(
-            UserEntitlement.user_id == user_id,
+            UserEntitlement.user_id == parsed_user_id,
             UserEntitlement.tier == tier.value,
             UserEntitlement.revoked_at.is_(None),
         )
@@ -146,15 +200,19 @@ _TIER_RANK_CASE = case(
 async def tier_for_user(session: AsyncSession, user_id: str) -> Tier:
     """Effective tier for ``user_id`` — highest active grant, or FREE.
 
-    Returns ``Tier.FREE`` for a user with no rows or only-revoked rows.
-    The ``ck_user_entitlements_tier`` CHECK constraint guarantees the
-    column value is a known ``Tier`` member, so the read coerces
-    directly without a defensive parse.
+    Returns ``Tier.FREE`` for a user with no rows, only-revoked rows, or
+    a string id that does not parse as a UUID (the anonymous sentinel
+    falls into this branch). The ``ck_user_entitlements_tier`` CHECK
+    constraint guarantees the column value is a known ``Tier`` member,
+    so the read coerces directly without a defensive parse.
     """
+    parsed_user_id = _parse_user_id(user_id)
+    if parsed_user_id is None:
+        return Tier.FREE
     raw = await session.scalar(
         select(UserEntitlement.tier)
         .where(
-            UserEntitlement.user_id == user_id,
+            UserEntitlement.user_id == parsed_user_id,
             UserEntitlement.revoked_at.is_(None),
         )
         .order_by(_TIER_RANK_CASE.desc())

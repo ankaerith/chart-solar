@@ -8,6 +8,11 @@ restarts mid-handler can re-deliver the event safely. A refund flips
 deleting the row, so the audit trail of "who was on what tier when"
 stays intact.
 
+``user_id`` is a real FK to ``users.id`` (``ON DELETE CASCADE``) so a
+maliciously-crafted Stripe event cannot grant a tier to a non-existent
+user, and account deletion drops the entitlement rows as part of the
+same transaction.
+
 Active tier resolution lives in ``backend.services.entitlements_grants``:
 a user's effective tier is the highest-rank non-revoked entitlement they
 hold; absent any rows the user is on ``Tier.FREE``.
@@ -18,7 +23,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -46,7 +51,12 @@ class UserEntitlement(Base):
         primary_key=True,
         default=uuid.uuid4,
     )
-    user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     tier: Mapped[str] = mapped_column(String(64), nullable=False)
     # Unique so a Stripe event re-delivery can't grant twice; the
     # webhook-dedupe ledger (``stripe_events``) catches most replays
