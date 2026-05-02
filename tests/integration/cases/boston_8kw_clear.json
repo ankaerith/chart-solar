@@ -16,7 +16,7 @@
     "production": {
       "source": "pvwatts_v8",
       "endpoint": "https://developer.nlr.gov/api/pvwatts/v8.json",
-      "fetched_at": "2026-05-02T19:36:06.199593Z",
+      "fetched_at": "2026-05-02T20:19:01.736308Z",
       "requests": [
         {
           "lat": 42.3601,
@@ -52,28 +52,10 @@
     }
   },
   "expected": {
-    "engine.dc_production.annual_ac_kwh": {
+    "artifacts/engine.dc_production/annual_ac_kwh": {
       "kind": "scalar",
       "value": 10603.4198759798,
       "tol_pct": 5.0
-    },
-    "engine.dc_production.monthly_ac_kwh": {
-      "kind": "vector",
-      "values": [
-        631.4082417256973,
-        769.896428595923,
-        917.3024577778518,
-        953.2091139675492,
-        1099.877359541296,
-        1038.099234463136,
-        1135.9304139368,
-        1096.342198158585,
-        959.3789521150611,
-        821.271389921212,
-        615.9198315305505,
-        564.7842542461256
-      ],
-      "tol_pct": 8.0
     }
   }
 }

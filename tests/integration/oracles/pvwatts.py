@@ -34,7 +34,6 @@ from ..harness.case import (
     PvwattsRequest,
     PvwattsResponseSlice,
     ScalarExpected,
-    VectorExpected,
 )
 
 PVWATTS_ENDPOINT = "https://developer.nlr.gov/api/pvwatts/v8.json"
@@ -139,14 +138,30 @@ def build_case(case_path: Path, api_key: str) -> Case:
         )
     )
 
-    case.expected["engine.dc_production.annual_ac_kwh"] = ScalarExpected(
+    # Production-related expected keys this builder owns. Wipe before
+    # writing so re-running over a case file doesn't accumulate stale
+    # entries (e.g., legacy dotted-path keys from earlier harness
+    # versions). Other keys — hand-derived NPV, monthly bills — are
+    # preserved.
+    production_keys_owned = {
+        "artifacts/engine.dc_production/annual_ac_kwh",
+        "engine.dc_production.annual_ac_kwh",  # pre-/-separator legacy
+        "engine.dc_production.monthly_ac_kwh",  # pre-/-separator legacy
+    }
+    for key in production_keys_owned:
+        case.expected.pop(key, None)
+
+    # Slash-separated path: walks ``result.artifacts``, then the literal
+    # feature key ``engine.dc_production`` (which contains dots — that's
+    # why the comparator's path syntax uses ``/`` rather than ``.``).
+    case.expected["artifacts/engine.dc_production/annual_ac_kwh"] = ScalarExpected(
         value=response.ac_annual_kwh,
         tol_pct=DEFAULT_PRODUCTION_TOL_ANNUAL_PCT,
     )
-    case.expected["engine.dc_production.monthly_ac_kwh"] = VectorExpected(
-        values=list(response.ac_monthly_kwh),
-        tol_pct=DEFAULT_PRODUCTION_TOL_MONTHLY_PCT,
-    )
+    # Monthly comparison is deferred: the engine emits ``hourly_ac_kw``
+    # (8760-long), not a 12-vector, so a direct comparison would need
+    # an hourly→monthly aggregator in the comparator. PVWatts oracle
+    # data is preserved on ``case.oracle`` for when that lands.
 
     case.dump(case_path)
     return case

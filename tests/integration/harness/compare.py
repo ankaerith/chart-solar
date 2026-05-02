@@ -1,16 +1,23 @@
 """Tolerance-aware comparison of expected vs actual case results.
 
 The case file declares `expected: dict[str, ExpectedMetric]` keyed by
-dotted path into the API response body's ``result`` artifact tree.
-Each metric's ``tol_pct`` is interpreted as ± percent of the expected
-value, applied scalar-wise (vector expectations apply tolerance
-element-by-element).
+slash-separated path into the API response body's ``result`` artifact
+tree. Each metric's ``tol_pct`` is interpreted as ± percent of the
+expected value, applied scalar-wise (vector expectations apply
+tolerance element-by-element).
 
-Why dotted-path lookup over typed accessors: the engine's artifact
+The path separator is ``/`` rather than ``.`` because the engine's
+artifact keys themselves contain dots (``engine.dc_production``,
+``engine.snow``, etc.). A path like
+``artifacts/engine.dc_production/annual_ac_kwh`` walks into the
+artifacts dict, then the literal-dot feature key, then the leaf —
+which dotted notation can't unambiguously express.
+
+Why path-string lookup over typed accessors: the engine's artifact
 tree is wide (every step writes its own block) and shifting (steps
-land per-phase). A flat path like ``engine.dc_production.annual_ac_kwh``
-keeps the case file expressive without coupling the harness to a
-backend Pydantic model that would need to be kept in sync.
+land per-phase). String paths keep the case file expressive without
+coupling the harness to a backend Pydantic model that would need to
+be kept in sync.
 """
 
 from __future__ import annotations
@@ -45,14 +52,18 @@ class CaseReport:
 
 
 def _walk(tree: Any, path: str) -> Any:
-    """Resolve a dotted path into a nested dict / list structure.
+    """Resolve a slash-separated path into a nested dict / list structure.
+
+    Each segment between slashes is matched verbatim — so a segment
+    can itself contain dots (``engine.dc_production``) and we look it
+    up as a single dict key without further parsing.
 
     Returns the sentinel string ``"<missing>"`` rather than raising,
-    so the comparator can produce a clean per-metric "missing" result
+    so the comparator produces a clean per-metric "missing" result
     instead of aborting the whole case on the first absent key.
     """
     cursor: Any = tree
-    for part in path.split("."):
+    for part in path.split("/"):
         if isinstance(cursor, dict) and part in cursor:
             cursor = cursor[part]
         elif isinstance(cursor, list) and part.isdigit():
