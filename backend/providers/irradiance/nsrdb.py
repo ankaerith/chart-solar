@@ -78,6 +78,9 @@ class NsrdbProvider:
         )
 
     async def _fetch_psm3(self, lat: float, lon: float) -> TmyData:
+        # v4 issues a 302 redirect to a pre-signed S3 URL hosting the
+        # generated CSV; httpx defaults to not following redirects, so
+        # we opt in for this call.
         response = await self._get(
             NSRDB_PSM3_URL,
             params={
@@ -90,6 +93,7 @@ class NsrdbProvider:
                 "interval": "60",
                 "utc": "false",
             },
+            follow_redirects=True,
         )
         return parse_nsrdb_csv(response.text, source_lat=lat, source_lon=lon)
 

@@ -91,9 +91,21 @@ def make_get(*, service: str, config: RetryConfig | None = None) -> GetFn:
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT_S,
+        follow_redirects: bool = False,
     ) -> httpx.Response:
+        # ``follow_redirects`` is opt-in per call. httpx defaults to
+        # False, and that's the right default for most upstreams
+        # (auth callbacks, OAuth flows can leak credentials over
+        # cross-origin redirects). NSRDB v4's download endpoint 302s
+        # to a pre-signed S3 URL — legitimate redirect-following case.
         client = _get_client(service, timeout=timeout)
-        response = await client.get(url, params=params, headers=headers, timeout=timeout)
+        response = await client.get(
+            url,
+            params=params,
+            headers=headers,
+            timeout=timeout,
+            follow_redirects=follow_redirects,
+        )
         response.raise_for_status()
         return response
 
