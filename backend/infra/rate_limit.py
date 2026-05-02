@@ -83,20 +83,43 @@ async def check_rate_limit(
 def _client_ip(request: Request) -> str:
     """Best-effort caller IP for rate-limit bucketing.
 
-    Trusts ``X-Forwarded-For`` only if the deployment sits behind a
-    reverse proxy (operator concern); falls back to the direct peer
-    address. Picking a stable per-caller token is the contract — the
-    proxy fronting prod must scrub any client-supplied XFF before
-    overwriting it, otherwise a hostile client can cycle through
-    fabricated IPs to dodge the bucket.
+    Honours ``X-Forwarded-For`` only when ``settings.trust_forwarded_for_hops``
+    is > 0 — i.e. the operator has explicitly declared how many trusted
+    reverse-proxy hops sit in front of the app. With ``N`` trusted hops,
+    the ``-N``th entry of XFF is the client-observed source. Anything to
+    its left is client-supplied and untrusted; anything to its right was
+    appended by the trusted proxies.
+
+    When ``trust_forwarded_for_hops == 0`` (the default) XFF is ignored
+    entirely; otherwise a hostile client could cycle XFF values to
+    bypass the per-IP bucket on a deploy that exposes the API directly.
+
+    The ``request.client.host`` we read from is whatever uvicorn has
+    decided is the peer. The Dockerfile launches uvicorn with
+    ``--no-proxy-headers`` so uvicorn doesn't pre-rewrite the peer from
+    XFF; deployments that need XFF parsing must opt in at *both*
+    layers (uvicorn flag + this setting) to keep the trust contract
+    explicit.
     """
+    hops = settings.trust_forwarded_for_hops
+    peer = request.client.host if request.client is not None else "unknown"
+    if hops <= 0:
+        return peer
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        # First entry is the originating client per the standard.
-        return forwarded.split(",", 1)[0].strip()
-    if request.client is not None:
-        return request.client.host
-    return "unknown"
+    if not forwarded:
+        return peer
+    entries = [part.strip() for part in forwarded.split(",") if part.strip()]
+    if len(entries) < hops:
+        # Misconfiguration: fewer hops in XFF than declared trusted.
+        # Fail safe by bucketing on the peer (the trusted proxy IP); a
+        # noisy log makes the misconfig discoverable.
+        _log.warning(
+            "rate_limit.xff_hop_mismatch",
+            declared_hops=hops,
+            xff_entries=len(entries),
+        )
+        return peer
+    return entries[-hops]
 
 
 def rate_limit_dependency(

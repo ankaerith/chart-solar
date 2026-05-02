@@ -163,3 +163,23 @@ def test_get_before_drain_returns_queued(
     # No result key for non-done jobs — the contract reserves it for
     # done responses so callers can pattern-match on its presence.
     assert "result" not in polled
+
+
+def test_get_by_other_user_404s(
+    client: TestClient,
+    clean_idempotency: None,
+    empty_queue: None,
+) -> None:
+    """A user that did not submit the job must not be able to read its
+    status by URL — the URL is not a capability. The response is 404
+    (not 403) to avoid leaking that the job_id exists.
+    """
+    submit = client.post("/api/forecast", json=_baseline_body())
+    job_id = submit.json()["job_id"]
+
+    app.dependency_overrides[current_user_id] = lambda: "different-user"
+    try:
+        poll = TestClient(app).get(f"/api/forecast/{job_id}")
+    finally:
+        app.dependency_overrides[current_user_id] = lambda: "e2e-test-user"
+    assert poll.status_code == 404

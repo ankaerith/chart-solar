@@ -80,12 +80,36 @@ class Settings(BaseSettings):
     # ``window.location``; the cookie is set on that response.
     auth_callback_url: str = "http://localhost:3000/auth/callback"
 
+    # Number of trusted reverse-proxy hops in front of the API. When 0
+    # (default) the rate limiter uses the direct peer address only —
+    # ``X-Forwarded-For`` is ignored, since a hostile client cycling
+    # XFF values would otherwise bypass per-IP buckets. Set to the
+    # actual hop count in production (1 for a single edge proxy, 2 for
+    # CDN→LB→app, etc.); the operator must guarantee that the outermost
+    # trusted proxy scrubs any client-supplied XFF before appending its
+    # own observed source address.
+    trust_forwarded_for_hops: int = 0
+
 
 settings = Settings()
+
+
+class MissingConfigError(RuntimeError):
+    """Raised when a required runtime setting is unset.
+
+    Subclass of :class:`RuntimeError` so existing ``except RuntimeError``
+    blocks keep catching it; the FastAPI handler in ``backend.main``
+    translates it to a structured 503 instead of letting it escape as
+    a plain-text 500.
+    """
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Required setting `{name}` is not set; check your environment.")
+        self.name = name
 
 
 def require(value: str | None, name: str) -> str:
     """Assert a config value is set; raise a clear error if not."""
     if not value:
-        raise RuntimeError(f"Required setting `{name}` is not set; check your environment.")
+        raise MissingConfigError(name)
     return value

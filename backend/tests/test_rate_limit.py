@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
-from backend.infra.rate_limit import check_rate_limit
+from backend.config import settings
+from backend.infra.rate_limit import _client_ip, check_rate_limit
 
 
 class _FakeRedis:
@@ -86,3 +88,37 @@ async def test_check_rate_limit_fails_open_on_redis_failure(raise_on: str) -> No
         limit=1,
         window_seconds=60,
     )
+
+
+def _request_with(*, peer: str | None, xff: str | None) -> Any:
+    """Stub a Starlette ``Request`` exposing only ``client.host`` + headers."""
+    headers = {"x-forwarded-for": xff} if xff is not None else {}
+    request = MagicMock()
+    request.client = MagicMock(host=peer) if peer is not None else None
+    request.headers = headers
+    return request
+
+
+def test_client_ip_ignores_xff_when_zero_trusted_hops(monkeypatch: pytest.MonkeyPatch) -> None:
+    """XFF must not influence the bucket key on a deploy that doesn't
+    declare any trusted proxies — otherwise an attacker cycling XFF
+    values bypasses the per-IP rate limit."""
+    monkeypatch.setattr(settings, "trust_forwarded_for_hops", 0)
+    request = _request_with(peer="127.0.0.1", xff="9.9.9.9")
+    assert _client_ip(request) == "127.0.0.1"
+
+
+def test_client_ip_peels_one_hop_when_one_trusted_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "trust_forwarded_for_hops", 1)
+    # One proxy in front: the rightmost (and only) XFF entry is the client.
+    request = _request_with(peer="10.0.0.1", xff="203.0.113.5")
+    assert _client_ip(request) == "203.0.113.5"
+
+
+def test_client_ip_falls_back_to_peer_on_xff_misconfig(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Operator declared 2 trusted hops but only 1 XFF entry showed up —
+    bucketing on the trusted-proxy peer is safer than trusting an XFF
+    entry that may have been client-supplied."""
+    monkeypatch.setattr(settings, "trust_forwarded_for_hops", 2)
+    request = _request_with(peer="10.0.0.1", xff="9.9.9.9")
+    assert _client_ip(request) == "10.0.0.1"

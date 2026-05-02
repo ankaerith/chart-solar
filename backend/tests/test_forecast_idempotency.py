@@ -66,7 +66,7 @@ def fake_enqueue() -> Iterator[list[tuple[str, dict[str, Any]]]]:
     """
     captured: list[tuple[str, dict[str, Any]]] = []
 
-    def _capture(job_id: str, payload: dict[str, Any]) -> None:
+    def _capture(job_id: str, payload: dict[str, Any], owner_user_id: str) -> None:
         captured.append((job_id, payload))
 
     with patch("backend.api.forecast.submit_forecast", side_effect=_capture):

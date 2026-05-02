@@ -78,15 +78,25 @@ async def submit_forecast_endpoint(
         )
         return response_body
 
-    await submit_forecast(job_id, inputs.model_dump())
+    await submit_forecast(job_id, inputs.model_dump(), user_id)
     log.info("forecast.enqueued", job_id=job_id, user_id=user_id)
     return response_body
 
 
 @router.get("/forecast/{job_id}")
-async def forecast_status(job_id: str) -> dict[str, Any]:
+async def forecast_status(
+    job_id: str,
+    user_id: str = Depends(current_user_id),
+) -> dict[str, Any]:
+    """Poll a forecast job's status.
+
+    The caller must be the user that submitted the job — an attacker
+    that learns a UUID elsewhere (referrer leak, screen-share, log
+    capture) cannot read the result. Mismatches return 404 rather than
+    403 so the response can't be used as an existence oracle.
+    """
     view = get_forecast_job(job_id)
-    if view is None:
+    if view is None or view.owner_user_id != user_id:
         raise HTTPException(status_code=404, detail="job not found")
     response: dict[str, Any] = {"job_id": view.job_id, "status": view.status}
     if view.result is not None:

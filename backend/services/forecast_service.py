@@ -52,16 +52,19 @@ class ForecastJobView:
     ``result`` is set when ``status == "done"`` — the engine artifacts
     payload returned by the worker. ``error`` carries RQ's serialised
     traceback when ``status == "error"`` so the caller self-diagnoses
-    without grepping worker logs.
+    without grepping worker logs. ``owner_user_id`` is the user id that
+    submitted the job (stamped into RQ meta at enqueue time); the API
+    route uses it to refuse polls from anyone else.
     """
 
     job_id: str
     status: ApiStatus
+    owner_user_id: str | None
     result: Any | None = None
     error: str | None = None
 
 
-async def submit_forecast(job_id: str, payload: dict[str, Any]) -> None:
+async def submit_forecast(job_id: str, payload: dict[str, Any], owner_user_id: str) -> None:
     """Hand a forecast job off to the queue under the given ``job_id``.
 
     Trampoline to ``backend.workers.queue.enqueue_forecast`` — the
@@ -70,11 +73,15 @@ async def submit_forecast(job_id: str, payload: dict[str, Any]) -> None:
     queue technology (SQS, Cloud Tasks) lands inside ``workers/`` and
     this signature absorbs the difference.
 
+    ``owner_user_id`` is stamped into RQ job meta so subsequent
+    ``GET /api/forecast/{job_id}`` requests can verify the polling
+    caller is the one that submitted.
+
     Async because the underlying ``redis-py`` client is synchronous and
     the worker queue offloads it via ``asyncio.to_thread``; awaiting here
     keeps the behaviour consistent and lets the API route ``await`` directly.
     """
-    await _enqueue_forecast(job_id, payload)
+    await _enqueue_forecast(job_id, payload, owner_user_id)
 
 
 def get_forecast_job(job_id: str) -> ForecastJobView | None:
@@ -84,17 +91,23 @@ def get_forecast_job(job_id: str) -> ForecastJobView | None:
     Folds the RQ ``JobStatus`` vocabulary into the four contract states
     here so the API route never sees an RQ-specific symbol. Result and
     error fields are populated only when the corresponding terminal
-    state is reached.
+    state is reached. ``owner_user_id`` rides through from RQ meta so
+    the route layer can enforce ownership before returning the result.
     """
     job = _get_job(job_id)
     if job is None:
         return None
     api_status = _RQ_STATUS_TO_API_STATUS[JobStatus(job.get_status())]
+    owner = job.meta.get("owner_user_id") if job.meta else None
     if api_status == "done":
-        return ForecastJobView(job_id=job_id, status=api_status, result=job.result)
+        return ForecastJobView(
+            job_id=job_id, status=api_status, owner_user_id=owner, result=job.result
+        )
     if api_status == "error":
-        return ForecastJobView(job_id=job_id, status=api_status, error=job.exc_info)
-    return ForecastJobView(job_id=job_id, status=api_status)
+        return ForecastJobView(
+            job_id=job_id, status=api_status, owner_user_id=owner, error=job.exc_info
+        )
+    return ForecastJobView(job_id=job_id, status=api_status, owner_user_id=owner)
 
 
 __all__ = [

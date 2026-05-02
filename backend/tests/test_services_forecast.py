@@ -18,11 +18,18 @@ from backend.services.forecast_service import (
 )
 
 
-def _fake_job(status: JobStatus, *, result: Any = None, exc_info: str | None = None) -> MagicMock:
+def _fake_job(
+    status: JobStatus,
+    *,
+    result: Any = None,
+    exc_info: str | None = None,
+    owner_user_id: str | None = "anonymous",
+) -> MagicMock:
     job = MagicMock()
     job.get_status.return_value = status.value
     job.result = result
     job.exc_info = exc_info
+    job.meta = {"owner_user_id": owner_user_id} if owner_user_id is not None else {}
     return job
 
 
@@ -38,7 +45,9 @@ def test_finished_status_collapses_to_done_with_result() -> None:
     job = _fake_job(JobStatus.FINISHED, result=expected_result)
     with patch("backend.services.forecast_service._get_job", return_value=job):
         view = get_forecast_job("job-1")
-    assert view == ForecastJobView(job_id="job-1", status="done", result=expected_result)
+    assert view == ForecastJobView(
+        job_id="job-1", status="done", owner_user_id="anonymous", result=expected_result
+    )
 
 
 def test_failed_status_collapses_to_error_with_traceback() -> None:
@@ -55,7 +64,7 @@ def test_started_status_maps_to_running_without_result_or_error() -> None:
     job = _fake_job(JobStatus.STARTED)
     with patch("backend.services.forecast_service._get_job", return_value=job):
         view = get_forecast_job("job-3")
-    assert view == ForecastJobView(job_id="job-3", status="running")
+    assert view == ForecastJobView(job_id="job-3", status="running", owner_user_id="anonymous")
 
 
 def test_pre_start_states_collapse_to_queued() -> None:

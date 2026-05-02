@@ -66,7 +66,7 @@ async def test_forecast_job_round_trips_through_real_queue(
     )
     job_id = str(uuid4())
 
-    await enqueue_forecast(job_id, inputs.model_dump())
+    await enqueue_forecast(job_id, inputs.model_dump(), "anonymous")
 
     worker = SimpleWorker([queue], connection=get_redis())
     worker.work(burst=True, with_scheduler=False)
@@ -92,9 +92,10 @@ async def test_correlation_id_propagates_to_job_meta(queue: Queue) -> None:
 
     set_correlation_id("test-corr-id-xyz")
     try:
-        await enqueue_forecast(job_id, inputs.model_dump())
+        await enqueue_forecast(job_id, inputs.model_dump(), "anonymous")
     finally:
         set_correlation_id(None)
 
     job = Job.fetch(job_id, connection=get_redis())
     assert job.meta["correlation_id"] == "test-corr-id-xyz"
+    assert job.meta["owner_user_id"] == "anonymous"

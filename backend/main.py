@@ -1,17 +1,20 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.api import audits, entitlements, forecast, health, irradiance, me, stripe_webhook
 from backend.api.auth.magic_link import router as auth_router
 from backend.api.auth.session_middleware import SessionMiddleware
-from backend.config import settings
+from backend.config import MissingConfigError, settings
 from backend.infra.http import aclose_all_clients
-from backend.infra.logging import configure_logging
+from backend.infra.logging import configure_logging, get_logger
 from backend.infra.middleware import BodySizeLimitMiddleware, CorrelationIdMiddleware
 from backend.services.entitlements_subscribers import register_subscribers
+
+_log = get_logger(__name__)
 
 configure_logging("api")
 
@@ -42,6 +45,24 @@ app = FastAPI(
     version="0.0.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(MissingConfigError)
+async def _missing_config_handler(request: Request, exc: MissingConfigError) -> JSONResponse:
+    """Translate a missing-required-secret error into a structured 503.
+
+    Without this handler the route returns plain-text ``Internal Server
+    Error`` (HTTP 500) — the frontend can't parse it and the operator
+    can't distinguish missing-config from any other unhandled exception.
+    503 is the correct semantic: the route would work, but a backing
+    secret isn't configured.
+    """
+    _log.error("config.missing_required", setting=exc.name, path=request.url.path)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": f"required setting `{exc.name}` is not configured"},
+    )
+
 
 # Order matters: CorrelationId outermost (so every log line carries
 # the request id), then BodySizeLimit (reject oversized bodies before
