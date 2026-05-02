@@ -82,9 +82,9 @@ def run_snow_loss(
     system: SystemInputs,
     dc: DcProductionResult,
     cm_per_event: float = DEFAULT_CM_PER_EVENT,
-    slant_height_m: float = DEFAULT_SLANT_HEIGHT_M,
-    lower_edge_height_m: float = DEFAULT_LOWER_EDGE_HEIGHT_M,
-    string_factor: float = 1.0,
+    slant_height_m: float | None = None,
+    lower_edge_height_m: float | None = None,
+    string_factor: float | None = None,
 ) -> SnowLossResult | None:
     """Run pvlib's Townsend monthly snow-loss model against the TMY.
 
@@ -92,11 +92,32 @@ def run_snow_loss(
     relative humidity — both are required Townsend inputs. The pipeline
     adapter treats ``None`` as "no snow derate this run" and leaves the
     pre-snow ``engine.dc_production`` stream as the source of truth.
+
+    Per-install array geometry resolves in order: explicit kwarg wins,
+    otherwise ``system.snow_geometry`` (when installer-quote extraction
+    surfaces it), otherwise residential-rooftop defaults.
     """
     if tmy.snowfall_cm_per_month is None:
         return None
     if tmy.relative_humidity_pct_per_month is None:
         return None
+
+    geom = system.snow_geometry
+    resolved_slant = (
+        slant_height_m
+        if slant_height_m is not None
+        else (geom.slant_height_m if geom is not None else DEFAULT_SLANT_HEIGHT_M)
+    )
+    resolved_lower_edge = (
+        lower_edge_height_m
+        if lower_edge_height_m is not None
+        else (geom.lower_edge_height_m if geom is not None else DEFAULT_LOWER_EDGE_HEIGHT_M)
+    )
+    resolved_string = (
+        string_factor
+        if string_factor is not None
+        else (geom.string_factor if geom is not None else 1.0)
+    )
 
     monthly_temp_c = aggregate_hourly_to_monthly_mean(tmy.temp_air_c)
     # Townsend's `poa_global` is monthly insolation (Wh/m²), an energy
@@ -114,9 +135,9 @@ def run_snow_loss(
         relative_humidity=np.asarray(tmy.relative_humidity_pct_per_month, dtype=float),
         temp_air=np.asarray(monthly_temp_c, dtype=float),
         poa_global=np.asarray(monthly_poa_wh_m2, dtype=float),
-        slant_height=slant_height_m,
-        lower_edge_height=lower_edge_height_m,
-        string_factor=string_factor,
+        slant_height=resolved_slant,
+        lower_edge_height=resolved_lower_edge,
+        string_factor=resolved_string,
     )
 
     monthly_loss = [max(0.0, min(1.0, float(value))) for value in loss]
