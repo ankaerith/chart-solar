@@ -42,14 +42,14 @@ def get_queue() -> Queue:
     return Queue("forecasts", connection=get_redis())
 
 
-def _enqueue_forecast_sync(job_id: str, payload: dict[str, Any]) -> None:
+def _enqueue_forecast_sync(job_id: str, payload: dict[str, Any], owner_user_id: str) -> None:
     from backend.workers.forecast_worker import run_forecast_job
 
     get_queue().enqueue(
         run_forecast_job,
         payload,
         job_id=job_id,
-        meta={"correlation_id": get_correlation_id()},
+        meta={"correlation_id": get_correlation_id(), "owner_user_id": owner_user_id},
         job_timeout=FORECAST_JOB_TIMEOUT_SECONDS,
         result_ttl=FORECAST_RESULT_TTL_SECONDS,
         failure_ttl=FORECAST_FAILURE_TTL_SECONDS,
@@ -60,17 +60,19 @@ def _enqueue_forecast_sync(job_id: str, payload: dict[str, Any]) -> None:
     )
 
 
-async def enqueue_forecast(job_id: str, payload: dict[str, Any]) -> None:
+async def enqueue_forecast(job_id: str, payload: dict[str, Any], owner_user_id: str) -> None:
     """Enqueue a forecast job with the standard timeout / TTL / retry
-    policy and the request's correlation ID stamped into job meta — so
+    policy. The request's correlation ID is stamped into job meta so
     worker log lines correlate with the originating HTTP request even
-    though they execute in a different process.
+    though they execute in a different process; ``owner_user_id`` is
+    also stamped into meta so ``GET /api/forecast/{job_id}`` can
+    enforce that the polling caller actually submitted the job.
 
     The redis-py client used here is synchronous; the LPUSH is offloaded
     via ``asyncio.to_thread`` so a Redis stall can't block the API event
     loop.
     """
-    await asyncio.to_thread(_enqueue_forecast_sync, job_id, payload)
+    await asyncio.to_thread(_enqueue_forecast_sync, job_id, payload, owner_user_id)
 
 
 def get_job(job_id: str) -> Job | None:
