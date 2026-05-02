@@ -75,6 +75,7 @@ def test_canonical_step_order_matches_phase_1a_pipeline() -> None:
         "engine.irradiance",
         "engine.consumption",
         "engine.dc_production",
+        "engine.snow",
         "engine.degradation",
         "engine.battery_dispatch",
         "engine.tariff",

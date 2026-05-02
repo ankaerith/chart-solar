@@ -10,10 +10,11 @@ under the matching artifact key.
 
 ADR 0006 reshapes the order: cell-temperature derating and inverter
 clipping are baked into ``engine.dc_production`` (pvlib's ModelChain),
-so they don't appear here as separate steps. Soiling and snow remain
-pipeline-aware but are deferred until the irradiance providers carry
-monthly precipitation / snowfall / RH — they're absent from
-``ENGINE_STEP_ORDER`` rather than registered no-ops.
+so they don't appear here as separate steps. ``engine.snow`` runs
+after dc_production and consumes its hourly POA + the TMY's monthly
+snowfall / RH to layer Townsend snow loss onto the AC stream;
+``engine.soiling`` is still deferred (pvlib's HSU model needs PM2.5 /
+PM10 columns the irradiance providers don't yet carry).
 
 The pipeline is sync-only: TMY fetching is the worker's responsibility
 (network IO, async). Tests pass a ``synthetic_tmy()`` directly.
@@ -31,6 +32,7 @@ from backend.engine.registry import StepFn, steps_for
 from backend.engine.snapshot import build_snapshot
 from backend.engine.steps.battery_dispatch import BatteryDispatchResult
 from backend.engine.steps.dc_production import DcProductionResult
+from backend.engine.steps.snow import SnowLossResult
 
 #: Canonical execution order. Pipeline iterates this list, skipping any
 #: key that is either unregistered or absent from the caller's requested
@@ -40,6 +42,7 @@ ENGINE_STEP_ORDER: tuple[str, ...] = (
     "engine.irradiance",
     "engine.consumption",
     "engine.dc_production",
+    "engine.snow",
     "engine.degradation",
     "engine.battery_dispatch",
     "engine.tariff",
@@ -138,6 +141,23 @@ def _resolve_consumption(c: ConsumptionInputs | None) -> list[float]:
     return [0.0] * HOURS_PER_TMY
 
 
+def _production_kw(state: ForecastState) -> list[float]:
+    """Hourly AC production stream after the snow derate, when present.
+
+    ``engine.snow`` runs between ``engine.dc_production`` and the load /
+    billing steps, so when the snow artifact exists every downstream
+    consumer (battery dispatch, tariff, export credit, finance) reads
+    the post-snow stream — same as if pvlib's ModelChain had produced
+    it directly. With no snow step (TMY without snow + RH columns), we
+    fall back to the raw dc_production stream.
+    """
+    snow: SnowLossResult | None = state.artifacts.get("engine.snow")
+    if snow is not None:
+        return snow.adjusted_hourly_ac_kw
+    dc: DcProductionResult = state.artifacts["engine.dc_production"]
+    return dc.hourly_ac_kw
+
+
 def _net_load(state: ForecastState) -> list[float]:
     """Hourly grid net-load: positive = import, negative = export.
 
@@ -145,7 +165,9 @@ def _net_load(state: ForecastState) -> list[float]:
     streams, this returns the *post-battery* signed net load
     (``import − export``) so the tariff + export-credit steps bill
     against what actually hits the meter. Pre-battery shape — pure
-    ``consumption − production`` — when no battery dispatch ran.
+    ``consumption − production`` — when no battery dispatch ran. The
+    production term comes from ``_production_kw``, so snow derate (if
+    any) is already baked in.
     """
     battery: BatteryDispatchResult | None = state.artifacts.get("engine.battery_dispatch")
     if battery is not None:
@@ -158,13 +180,20 @@ def _net_load(state: ForecastState) -> list[float]:
             )
         ]
     consumption: list[float] = state.artifacts["engine.consumption"]
-    dc: DcProductionResult = state.artifacts["engine.dc_production"]
-    return [c - p for c, p in zip(consumption, dc.hourly_ac_kw, strict=True)]
+    return [c - p for c, p in zip(consumption, _production_kw(state), strict=True)]
 
 
 def _adapter_dc_production(state: ForecastState, fn: StepFn) -> None:
     tmy: TmyData = state.artifacts["engine.irradiance"]
     state.artifacts["engine.dc_production"] = fn(system=state.inputs.system, tmy=tmy)
+
+
+def _adapter_snow(state: ForecastState, fn: StepFn) -> None:
+    tmy: TmyData = state.artifacts["engine.irradiance"]
+    dc: DcProductionResult = state.artifacts["engine.dc_production"]
+    result = fn(tmy=tmy, system=state.inputs.system, dc=dc)
+    if result is not None:
+        state.artifacts["engine.snow"] = result
 
 
 def _adapter_degradation(state: ForecastState, fn: StepFn) -> None:
@@ -220,10 +249,23 @@ def _adapter_finance(state: ForecastState, fn: StepFn) -> None:
         return
     if "engine.degradation" not in state.artifacts:
         return
+    dc: DcProductionResult = state.artifacts["engine.dc_production"]
+    snow: SnowLossResult | None = state.artifacts.get("engine.snow")
+    if snow is not None:
+        # Finance re-bills hourly + tracks annual energy per year, so
+        # both streams need the snow derate baked in. The dc_production
+        # struct's other fields (peak_ac_kw, ratios, POA) are unaffected
+        # by snow and pass through unchanged.
+        dc = dc.model_copy(
+            update={
+                "hourly_ac_kw": snow.adjusted_hourly_ac_kw,
+                "annual_ac_kwh": snow.adjusted_annual_ac_kwh,
+            }
+        )
     state.artifacts["engine.finance"] = fn(
         financial=state.inputs.financial,
         consumption=state.artifacts["engine.consumption"],
-        dc=state.artifacts["engine.dc_production"],
+        dc=dc,
         degradation=state.artifacts["engine.degradation"],
         schedule=state.inputs.tariff.schedule,
         export_credit=state.inputs.tariff.export_credit,
@@ -232,6 +274,7 @@ def _adapter_finance(state: ForecastState, fn: StepFn) -> None:
 
 _ADAPTERS: dict[str, _StepAdapter] = {
     "engine.dc_production": _adapter_dc_production,
+    "engine.snow": _adapter_snow,
     "engine.degradation": _adapter_degradation,
     "engine.battery_dispatch": _adapter_battery_dispatch,
     "engine.tariff": _adapter_tariff,

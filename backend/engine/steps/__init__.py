@@ -11,15 +11,15 @@ Modules in this package fall into three groups:
 * **Implemented + registered**: ``dc_production``, ``degradation``,
   ``tariff``, ``export_credit`` — real Phase-1a entry points hooked
   into the pipeline orchestrator (chart-solar-cm4i).
-* **Pipeline-aware stubs**: ``soiling``, ``snow`` — wrap pvlib's
-  models once monthly precipitation / snowfall / RH route through
-  ``TmyData`` (chart-solar-743 / chart-solar-9ji blocked on
-  chart-solar-dvc4). ``cell_temperature`` and ``clipping`` are
-  permanently stubbed: pvlib's ModelChain handles them inside
-  ``dc_production`` (ADR 0006).
+* **Pipeline-aware stubs**: ``soiling`` — wraps pvlib's HSU model once
+  PM2.5 + PM10 columns route through ``TmyData`` (chart-solar-743).
+  ``cell_temperature`` and ``clipping`` are permanently stubbed:
+  pvlib's ModelChain handles them inside ``dc_production`` (ADR 0006).
 * **Phase-1a in-flight**: ``consumption``, ``battery_dispatch``,
-  ``finance``, ``monte_carlo`` — implementations arrive as their
-  respective beads close. The TMY fetch is the worker's responsibility
+  ``finance``, ``monte_carlo``, ``snow`` — implementations arrive as
+  their respective beads close. ``snow`` consumes the monthly snowfall
+  + RH columns now carried on ``TmyData`` and wraps pvlib's Townsend
+  model (chart-solar-9ji). The TMY fetch is the worker's responsibility
   (network IO, async); the engine consumes pre-fetched ``TmyData``
   via ``backend.domain.tmy`` and never has its own irradiance step.
 """

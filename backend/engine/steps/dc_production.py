@@ -50,10 +50,16 @@ class DcProductionResult(BaseModel):
     total DC output before inverter clipping; ``hourly_ac_kw`` is the
     inverter's clipped AC output. Both are in kilowatts (not watts) so
     downstream finance / tariff steps don't have to remember.
+
+    ``hourly_poa_w_m2`` is the plane-of-array global irradiance ModelChain
+    transposed during the run — exposed so downstream steps that need POA
+    (``engine.snow``'s Townsend model, ``engine.soiling``'s HSU model)
+    don't have to recompute it from GHI/DNI/DHI + solar position.
     """
 
     hourly_dc_kw: list[float] = Field(..., min_length=HOURS_PER_TMY, max_length=HOURS_PER_TMY)
     hourly_ac_kw: list[float] = Field(..., min_length=HOURS_PER_TMY, max_length=HOURS_PER_TMY)
+    hourly_poa_w_m2: list[float] = Field(..., min_length=HOURS_PER_TMY, max_length=HOURS_PER_TMY)
     annual_dc_kwh: float = Field(..., ge=0.0)
     annual_ac_kwh: float = Field(..., ge=0.0)
     peak_ac_kw: float = Field(..., ge=0.0)
@@ -124,10 +130,12 @@ def run_dc_production(
 
     dc_kw = (_aligned_w_series(mc.results.dc, index) / 1000.0).clip(lower=0.0)
     ac_kw = (_aligned_w_series(mc.results.ac, index) / 1000.0).clip(lower=0.0)
+    poa_w_m2 = _aligned_poa_series(mc.results.total_irrad, index)
 
     return DcProductionResult(
         hourly_dc_kw=dc_kw.tolist(),
         hourly_ac_kw=ac_kw.tolist(),
+        hourly_poa_w_m2=poa_w_m2.tolist(),
         annual_dc_kwh=float(dc_kw.sum()),
         annual_ac_kwh=float(ac_kw.sum()),
         peak_ac_kw=float(ac_kw.max()),
@@ -143,3 +151,19 @@ def _aligned_w_series(value: object, index: pd.DatetimeIndex) -> pd.Series:
     if not isinstance(value, pd.Series):
         raise TypeError(f"unexpected ModelChain result type: {type(value).__name__}")
     return value.reindex(index).fillna(0.0).astype(float)
+
+
+def _aligned_poa_series(total_irrad: object, index: pd.DatetimeIndex) -> pd.Series:
+    """Extract POA global from ``ModelChain.results.total_irrad``.
+
+    pvlib returns a DataFrame with ``poa_global`` plus the diffuse +
+    direct components; we only need the total. Reindex defensively for
+    the same reason as ``_aligned_w_series`` and clip negative values
+    that arise from numerical noise on the diffuse model in shoulder
+    hours.
+    """
+    if not isinstance(total_irrad, pd.DataFrame):
+        raise TypeError(f"unexpected total_irrad type: {type(total_irrad).__name__}")
+    if "poa_global" not in total_irrad.columns:
+        raise KeyError("ModelChain.results.total_irrad missing 'poa_global'")
+    return total_irrad["poa_global"].reindex(index).fillna(0.0).astype(float).clip(lower=0.0)
