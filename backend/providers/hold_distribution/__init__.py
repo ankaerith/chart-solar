@@ -21,7 +21,7 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from backend.engine.finance.sale import HoldYearProbability
+from backend.domain.hold import HoldYearProbability
 
 #: ACS 2022 median owner-occupied tenure (rounded). Source: U.S. Census
 #: Bureau, "Length of time householders have lived in unit".

@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from backend.engine.finance.sale import SaleScenarioInputs, expected_sale_npv
+from backend.domain.hold import SaleScenarioInputs
+from backend.engine.finance.sale import expected_sale_npv
 from backend.providers.hold_distribution import (
     DEFAULT_HOLD_SIGMA_YEARS,
     DEFAULT_HORIZON_YEARS,

@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import pytest
 
-from backend.engine.finance.sale import (
+from backend.domain.hold import (
     DEFAULT_HOME_VALUE_UPLIFT_PER_W_DC,
     DEFAULT_TRANSACTION_COSTS_PCT,
     HoldYearProbability,
     SaleScenarioInputs,
+)
+from backend.engine.finance.sale import (
     expected_sale_npv,
     home_value_uplift,
 )
