@@ -9,48 +9,19 @@ opted-in does NOT auto-resume historical audits.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 import backend.database as _db
 from backend.db.audit_models import Audit, Installer, InstallerQuote
 from backend.db.auth_models import User
-from backend.entitlements.guards import current_user_id
-from backend.main import app
 from backend.services.audit_service import set_user_aggregation_opt_out
+from backend.tests.conftest import ALICE_USER_ID, BOB_USER_ID
 
-ALICE = uuid.uuid4()
-BOB = uuid.uuid4()
-
-
-@pytest.fixture
-def client_alice() -> Iterator[TestClient]:
-    app.dependency_overrides[current_user_id] = lambda: str(ALICE)
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.pop(current_user_id, None)
-
-
-@pytest.fixture
-def client_anonymous() -> Iterator[TestClient]:
-    with TestClient(app) as c:
-        yield c
-
-
-@pytest.fixture
-async def db() -> AsyncIterator[Any]:
-    if _db.SessionLocal is None:
-        pytest.skip("Postgres unavailable for integration tests")
-    async with _db.SessionLocal() as session:
-        yield session
-        await session.execute(text("DELETE FROM installer_quotes"))
-        await session.execute(text("DELETE FROM audits"))
-        await session.execute(text("DELETE FROM users"))
-        await session.commit()
+ALICE = ALICE_USER_ID
+BOB = BOB_USER_ID
 
 
 async def _make_user(session: Any, *, user_id: uuid.UUID, email: str) -> None:

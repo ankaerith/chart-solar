@@ -10,65 +10,16 @@ the test discipline here doesn't change.
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
 
 import backend.database as _db
 from backend.db.audit_models import Audit, InstallerQuote, UserPiiVault
-from backend.entitlements.guards import current_user_id
-from backend.main import app
+from backend.tests.conftest import ALICE_USER_ID, BOB_USER_ID, make_audit
 
-ALICE = uuid.uuid4()
-BOB = uuid.uuid4()
-
-
-@pytest.fixture
-def client_alice() -> Iterator[TestClient]:
-    app.dependency_overrides[current_user_id] = lambda: str(ALICE)
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.pop(current_user_id, None)
-
-
-@pytest.fixture
-def client_bob() -> Iterator[TestClient]:
-    app.dependency_overrides[current_user_id] = lambda: str(BOB)
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.pop(current_user_id, None)
-
-
-@pytest.fixture
-def client_anonymous() -> Iterator[TestClient]:
-    # Default ``current_user_id`` returns ``ANONYMOUS_USER_ID``; we
-    # don't override here so the auth dep sees the anonymous sentinel.
-    with TestClient(app) as c:
-        yield c
-
-
-@pytest.fixture
-async def db() -> AsyncIterator[Any]:
-    if _db.SessionLocal is None:
-        pytest.skip("Postgres unavailable for integration tests")
-    async with _db.SessionLocal() as session:
-        yield session
-        # Per-test cleanup. Quotes go via FK CASCADE off audits, but
-        # explicit deletes keep the cleanup self-evident in failures.
-        await session.execute(text("DELETE FROM installer_quotes"))
-        await session.execute(text("DELETE FROM audits"))
-        await session.execute(text("DELETE FROM user_pii_vault"))
-        await session.commit()
-
-
-async def _make_audit(session: Any, *, owner: uuid.UUID) -> uuid.UUID:
-    audit = Audit(user_id=owner, location_bucket="98101")
-    session.add(audit)
-    await session.commit()
-    return audit.id
+ALICE = ALICE_USER_ID
+BOB = BOB_USER_ID
 
 
 async def _make_installer(session: Any) -> uuid.UUID:
@@ -115,7 +66,7 @@ async def test_get_audit_returns_404_when_caller_is_not_the_owner(
     db: Any,
     client_bob: TestClient,
 ) -> None:
-    audit_id = await _make_audit(db, owner=ALICE)
+    audit_id = await make_audit(db, owner=ALICE)
     resp = client_bob.get(f"/api/audits/{audit_id}")
     # 404 *not* 403 — prevents enumeration (chart-solar-kqkr 3).
     assert resp.status_code == 404
@@ -125,7 +76,7 @@ async def test_delete_audit_returns_404_when_caller_is_not_the_owner(
     db: Any,
     client_bob: TestClient,
 ) -> None:
-    audit_id = await _make_audit(db, owner=ALICE)
+    audit_id = await make_audit(db, owner=ALICE)
     resp = client_bob.delete(f"/api/audits/{audit_id}")
     assert resp.status_code == 404
     # The audit row must still exist after Bob's failed delete.
@@ -148,7 +99,7 @@ async def test_owner_reads_their_own_audit(
     db: Any,
     client_alice: TestClient,
 ) -> None:
-    audit_id = await _make_audit(db, owner=ALICE)
+    audit_id = await make_audit(db, owner=ALICE)
     resp = client_alice.get(f"/api/audits/{audit_id}")
     assert resp.status_code == 200
     body = resp.json()
@@ -160,7 +111,7 @@ async def test_owner_deletes_their_own_audit_and_quotes_cascade(
     db: Any,
     client_alice: TestClient,
 ) -> None:
-    audit_id = await _make_audit(db, owner=ALICE)
+    audit_id = await make_audit(db, owner=ALICE)
     installer_id = await _make_installer(db)
     quote = InstallerQuote(audit_id=audit_id, installer_id=installer_id)
     db.add(quote)
@@ -182,7 +133,7 @@ async def test_delete_audit_replay_returns_404(
     db: Any,
     client_alice: TestClient,
 ) -> None:
-    audit_id = await _make_audit(db, owner=ALICE)
+    audit_id = await make_audit(db, owner=ALICE)
     first = client_alice.delete(f"/api/audits/{audit_id}")
     second = client_alice.delete(f"/api/audits/{audit_id}")
     assert first.status_code == 200
@@ -270,8 +221,8 @@ async def test_delete_pii_only_drops_callers_rows(
 async def test_find_audit_owned_by_filters_by_user_id(db: Any) -> None:
     from backend.services.audit_service import find_audit_owned_by
 
-    alice_audit_id = await _make_audit(db, owner=ALICE)
-    await _make_audit(db, owner=BOB)
+    alice_audit_id = await make_audit(db, owner=ALICE)
+    await make_audit(db, owner=BOB)
 
     found = await find_audit_owned_by(db, audit_id=alice_audit_id, user_id=str(ALICE))
     assert found is not None
