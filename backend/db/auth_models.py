@@ -25,7 +25,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +53,16 @@ class User(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+    # Per-user override on ADR 0005's default-ON aggregation. Flipping
+    # this true cascades to ``installer_quotes.aggregation_opt_in``
+    # for every audit owned by the user (see ``audit_service``). No
+    # FK to audits yet — that lands with chart-solar-n9rn alongside
+    # the audits.user_id FK.
+    aggregation_opt_out: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
     )
 
 
