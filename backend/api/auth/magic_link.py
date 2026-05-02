@@ -19,13 +19,22 @@ exercised independently of FastAPI.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Cookie, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 
 import backend.database as _db
 from backend.config import settings
 from backend.infra.logging import get_logger
+from backend.infra.rate_limit import (
+    LOGIN_PER_EMAIL_LIMIT,
+    LOGIN_PER_EMAIL_WINDOW_SECONDS,
+    LOGIN_PER_IP_LIMIT,
+    LOGIN_PER_IP_WINDOW_SECONDS,
+    check_rate_limit,
+    get_rate_limit_redis,
+    per_ip_dependency,
+)
 from backend.providers.email.resend import ResendEmailProvider
 from backend.services.auth_service import (
     MagicLinkError,
@@ -38,26 +47,58 @@ from backend.services.auth_service import (
 router = APIRouter()
 _log = get_logger(__name__)
 
+_login_per_ip_throttle = per_ip_dependency(
+    bucket="login_ip",
+    limit=LOGIN_PER_IP_LIMIT,
+    window_seconds=LOGIN_PER_IP_WINDOW_SECONDS,
+)
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
 
 
-@router.post("/auth/login")
-async def login(payload: LoginRequest) -> dict[str, str]:
+@router.post("/auth/login", dependencies=[Depends(_login_per_ip_throttle)])
+async def login(request: Request, payload: LoginRequest) -> dict[str, str]:
     """Request a magic-link sign-in email.
 
     Always 200 — the response shape doesn't change whether the email
     matches a known user. Operator probing for "is bob@example.com a
     user" gets the same answer either way.
 
+    Rate-limited two ways: the per-IP throttle on the route stops
+    bulk volume from a single attacker; the per-email throttle below
+    stops a distributed attack from spamming a specific inbox via
+    Resend (which we are billed for and whose deliverability we depend
+    on). Both 429 with no email-existence side-channel.
+
     The DB write and the Resend send are split: we close the session
     before invoking the email provider so a slow Resend round-trip
     cannot park a Postgres connection.
     """
+    email = str(payload.email).strip().lower()
+
+    # Per-email bucket — must come after the body parses so we have the
+    # email; the per-IP throttle (route-level Depends above) already ran.
+    redis_client = get_rate_limit_redis()
+    allowed = await check_rate_limit(
+        redis_client,
+        key=f"rl:login_email:{email}",
+        limit=LOGIN_PER_EMAIL_LIMIT,
+        window_seconds=LOGIN_PER_EMAIL_WINDOW_SECONDS,
+    )
+    if not allowed:
+        _log.warning("auth.login_rate_limited", scope="email")
+        # Same 429 shape as the per-IP throttle so the client can't
+        # distinguish "this email is throttled" from "your IP is throttled".
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="rate limit exceeded; try again later",
+        )
+
     email_provider = ResendEmailProvider()
     async with _db.SessionLocal() as session:
-        pending = await issue_magic_link(session, email=str(payload.email))
+        pending = await issue_magic_link(session, email=email)
     await send_magic_link_email(email_provider, pending)
     return {"status": "magic_link_sent"}
 
