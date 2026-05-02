@@ -1,13 +1,21 @@
-"""NREL PSM3 (NSRDB) adapter — US coverage.
+"""NREL NSRDB GOES TMY (PSM v4) adapter — US coverage.
 
-Endpoint: https://developer.nrel.gov/api/nsrdb/v2/solar/psm3-tmy-download.csv
+Endpoint: https://developer.nlr.gov/api/nsrdb/v2/solar/nsrdb-GOES-tmy-v4-0-0-download.csv
 Auth:    `api_key` query param + a registered `email` query param.
 
-PSM3 ships TMY as a CSV: two metadata header rows, then a data header,
-then 8760 hourly rows (UTC offset baked in via the `Local Time Zone`
-metadata). We expose the parsed shape via `TmyData`; the network layer
-goes through `backend.infra.http.make_get` so retries + the per-service
-breaker stay consistent with every other upstream.
+NREL migrated the developer host from ``developer.nrel.gov`` to
+``developer.nlr.gov`` and superseded PSM v3 with GOES TMY v4 in early
+2026. The .csv synchronous mode is constrained to single-POINT,
+single-YEAR requests — that's exactly our access pattern. The
+alternative .json mode is async (email-link), which doesn't fit a
+60s worker timeout.
+
+The CSV shape is unchanged from v3: two metadata header rows, then a
+data header, then 8760 hourly rows (UTC offset baked in via the
+``Local Time Zone`` metadata). We expose the parsed shape via
+``TmyData``; the network layer goes through
+``backend.infra.http.make_get`` so retries + the per-service breaker
+stay consistent with every other upstream.
 
 Monthly aggregates: PSM3 carries hourly Relative Humidity, which we
 average into ``relative_humidity_pct_per_month`` so the soiling step
@@ -33,7 +41,7 @@ from backend.providers.irradiance.era5_land import (
     fetch_aggregates_with_primary,
 )
 
-NSRDB_PSM3_URL = "https://developer.nrel.gov/api/nsrdb/v2/solar/psm3-tmy-download.csv"
+NSRDB_PSM3_URL = "https://developer.nlr.gov/api/nsrdb/v2/solar/nsrdb-GOES-tmy-v4-0-0-download.csv"
 NSRDB_ATTRIBUTES = "ghi,dni,dhi,air_temperature,wind_speed,surface_albedo,relative_humidity"
 
 
@@ -60,7 +68,7 @@ class NsrdbProvider:
         if not self._api_key or not self._user_email:
             raise RuntimeError(
                 "NsrdbProvider requires `nsrdb_api_key` + `nsrdb_user_email` "
-                "settings; register at https://developer.nrel.gov/signup/"
+                "settings; register at https://developer.nlr.gov/signup/"
             )
         return await fetch_aggregates_with_primary(
             self._sibling,
