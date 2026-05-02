@@ -68,6 +68,36 @@ Display weight is 600, tracking `-0.022em` (`--display-weight`, `--display-track
 2. Map it inside `@theme inline { … }` so Tailwind utilities pick it up (`--color-*`, `--font-*`, `--radius-*`).
 3. Document it here.
 
+## Contrast (WCAG 2.1 AA)
+
+Verified against `--bg` `#ecebe3` (the page canvas). Run the helper at
+`scripts/check-contrast.js` (or recompute via the WCAG luminance formula)
+to refresh after a token change.
+
+| Token        | Hex      | Ratio    | Verdict        |
+|--------------|----------|----------|----------------|
+| `ink`        | #0f1421  | 15.37:1  | AA             |
+| `ink-2`      | #1f2a3f  | 12.02:1  | AA             |
+| `ink-dim`    | #566173  | 5.24:1   | AA             |
+| `ink-faint`  | #8a92a0  | 2.62:1   | **disabled / decorative only** |
+| `accent`     | #1d3461  | 10.23:1  | AA (links)     |
+| `accent-2`   | #7a2826  | 8.13:1   | AA             |
+| `good`       | #2e6b48  | 5.30:1   | AA             |
+| `warn`       | #a86512  | 3.87:1   | AA-large only  |
+| `bad`        | #7a2826  | 8.13:1   | AA             |
+
+Constraints:
+
+- **`ink-faint`** is **not** for body copy. Use it only for disabled
+  controls, decorative captions, or text that's already paired with a
+  full-contrast label — disabled text is exempt under WCAG 1.4.3.
+- **`warn`** passes AA only for "large text" (≥18 pt regular or ≥14 pt
+  bold). For body-size warning copy, use `ink` text and use `warn` for
+  the icon / leading rule only.
+
+Axe-core sweeps every critical path in CI (`bun run test:a11y`); add
+new routes to `tests/a11y.spec.ts` as they ship to keep the gate honest.
+
 ## Why a single locked theme
 
 `solar-decisions/project/themes.jsx` ships Solstice·Ink as the locked editorial direction — cool oyster paper, prussian-blue ink, oxblood secondary, with Newsreader/Inter/IBM Plex Mono. We honour that at v1: no dark mode, no theme picker, no per-tenant skinning. Tokenizing now keeps a future theme switch a single `data-theme` attribute swap.

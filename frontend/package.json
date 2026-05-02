@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "check:i18n": "bash ../scripts/check-i18n.sh ."
+    "check:i18n": "bash ../scripts/check-i18n.sh .",
+    "test:a11y": "playwright test"
   },
   "dependencies": {
     "next": "16.2.4",
@@ -23,14 +24,16 @@
     "recharts": "^3.8.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "^24",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "typescript": "^6.0.3",
-    "tailwindcss": "^4.2.4",
-    "@tailwindcss/postcss": "^4.2.4",
-    "postcss": "^8.5.12",
     "eslint": "^9.39.4",
-    "eslint-config-next": "16.2.4"
+    "eslint-config-next": "16.2.4",
+    "postcss": "^8.5.12",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3"
   }
 }

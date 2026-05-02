@@ -25,20 +25,20 @@ export default function Home() {
         <div className="grid grid-cols-3 gap-3 text-sm">
           <Swatch name="bg" className="bg-bg" />
           <Swatch name="panel" className="bg-panel" />
-          <Swatch name="ink" className="bg-ink text-accent-ink" />
-          <Swatch name="accent" className="bg-accent text-accent-ink" />
-          <Swatch name="accent-2" className="bg-accent-2 text-accent-ink" />
+          <Swatch name="ink" className="bg-ink" />
+          <Swatch name="accent" className="bg-accent" />
+          <Swatch name="accent-2" className="bg-accent-2" />
           <Swatch name="rule" className="bg-rule" />
-          <Swatch name="good" className="bg-good text-accent-ink" />
-          <Swatch name="warn" className="bg-warn text-accent-ink" />
-          <Swatch name="bad" className="bg-bad text-accent-ink" />
+          <Swatch name="good" className="bg-good" />
+          <Swatch name="warn" className="bg-warn" />
+          <Swatch name="bad" className="bg-bad" />
         </div>
         <p className="font-mono text-sm text-ink-dim">
           $/W · 8,760h · NPV · IRR — numerics in IBM Plex Mono
         </p>
       </Panel>
 
-      <p className="text-sm text-ink-faint">
+      <p className="text-sm text-ink-dim">
         Phase 0: scaffold. See{" "}
         <code className="font-mono">PRODUCT_PLAN.md</code> for what comes next.
       </p>
@@ -47,11 +47,15 @@ export default function Home() {
 }
 
 function Swatch({ name, className }: { name: string; className: string }) {
+  // Label sits outside the coloured chip — keeps the demo accessible
+  // regardless of the swatch's contrast against text.
   return (
-    <div
-      className={`flex h-16 items-end justify-between rounded-md border border-rule px-3 py-2 font-mono text-xs ${className}`}
-    >
-      <span>{name}</span>
+    <div className="flex flex-col gap-1">
+      <div
+        aria-hidden="true"
+        className={`h-12 rounded-md border border-rule ${className}`}
+      />
+      <span className="font-mono text-[11px] text-ink-2">{name}</span>
     </div>
   );
 }

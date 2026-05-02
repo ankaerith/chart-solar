@@ -30,8 +30,34 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
     lastFocusedRef.current = document.activeElement;
+    const FOCUSABLE =
+      'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose?.();
+      if (e.key === "Escape") {
+        onClose?.();
+        return;
+      }
+      // Focus trap: keep Tab + Shift+Tab cycling inside the dialog so
+      // keyboard users can't reach the inert content underneath.
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const focusables = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE),
+      ).filter((el) => !el.hasAttribute("aria-hidden"));
+      if (focusables.length === 0) {
+        e.preventDefault();
+        dialogRef.current.focus();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);

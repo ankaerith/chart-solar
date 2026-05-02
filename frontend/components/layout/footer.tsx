@@ -57,7 +57,7 @@ export function Footer() {
           </div>
           {COLS.map((col) => (
             <div key={col.head}>
-              <div className="mb-3.5 font-mono text-[10.5px] tracking-[0.14em] text-ink-faint uppercase">
+              <div className="mb-3.5 font-mono text-[10.5px] tracking-[0.14em] text-ink-dim uppercase">
                 {col.head}
               </div>
               <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
@@ -75,7 +75,7 @@ export function Footer() {
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-5 font-mono text-[11px] tracking-[0.04em] text-ink-faint">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-5 font-mono text-[11px] tracking-[0.04em] text-ink-dim">
           <div>
             © {new Date().getFullYear()} Chart Solar · independent forecasting
             for residential solar
