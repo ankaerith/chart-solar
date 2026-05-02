@@ -38,6 +38,29 @@
   /* radius */
   --radius: 6px;
   --radius-lg: 10px;
+
+  /* shadcn/ui semantic aliases — map shadcn's CSS-variable contract onto
+     Solstice·Ink tokens so any primitive we pull in via `npx shadcn add …`
+     inherits the editorial look without per-component overrides.
+     See frontend/lib/theme.md § shadcn mapping for the audit + caveats. */
+  --background: var(--bg);
+  --foreground: var(--ink);
+  --card: var(--panel);
+  --card-foreground: var(--ink);
+  --popover: var(--panel);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--bg);
+  --secondary: var(--panel-2);
+  --secondary-foreground: var(--ink-2);
+  --muted: var(--panel-2);
+  --muted-foreground: var(--ink-dim);
+  --accent-foreground: var(--accent-ink);
+  --destructive: var(--bad);
+  --destructive-foreground: var(--accent-ink);
+  --border: var(--rule);
+  --input: var(--rule-strong);
+  --ring: var(--accent);
 }
 
 @theme inline {
@@ -70,6 +93,27 @@
   --radius-sm: var(--radius);
   --radius-md: var(--radius);
   --radius-lg: var(--radius-lg);
+
+  /* shadcn/ui semantic colors — exposed as Tailwind utilities (`bg-card`,
+     `text-muted-foreground`, etc.) for any shadcn primitive we adopt. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 }
 
 html {
@@ -85,4 +129,14 @@ h1, h2, h3, h4, h5, h6, .display {
   font-family: var(--font-display), "Source Serif 4", Georgia, serif;
   font-weight: var(--display-weight);
   letter-spacing: var(--display-tracking);
+}
+
+/* Modal animation — used by components/ui/modal.tsx. */
+@keyframes sd-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes sd-pop-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
 }

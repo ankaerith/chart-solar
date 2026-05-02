@@ -7,29 +7,35 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:i18n": "bash ../scripts/check-i18n.sh .",
+    "test:a11y": "playwright test"
   },
   "dependencies": {
+    "@tanstack/react-form": "^1.29.1",
+    "@tanstack/react-query": "^5.100.6",
+    "@tanstack/react-table": "^8.21.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.12.0",
     "next": "16.2.4",
     "react": "19.2.5",
     "react-dom": "19.2.5",
-    "@tanstack/react-query": "^5.100.6",
-    "@tanstack/react-table": "^8.21.3",
-    "clsx": "^2.1.1",
+    "recharts": "^3.8.1",
     "tailwind-merge": "^3.5.0",
-    "class-variance-authority": "^0.7.1",
-    "lucide-react": "^1.12.0",
-    "recharts": "^3.8.1"
+    "zod": "^4.4.2"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "^24",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "typescript": "^6.0.3",
-    "tailwindcss": "^4.2.4",
-    "@tailwindcss/postcss": "^4.2.4",
-    "postcss": "^8.5.12",
     "eslint": "^9.39.4",
-    "eslint-config-next": "16.2.4"
+    "eslint-config-next": "16.2.4",
+    "postcss": "^8.5.12",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3"
   }
 }

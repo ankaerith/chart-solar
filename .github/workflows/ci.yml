@@ -67,7 +67,13 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
+      - run: bun run check:i18n
       - run: bun run build
+      # Baseline a11y sweep — axe-core via Playwright on critical paths.
+      # Browser binary is ~140 MB; cache between runs would speed this up
+      # if the suite grows past the first few routes.
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:a11y
 
   gitleaks:
     runs-on: ubuntu-latest
