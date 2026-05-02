@@ -1,6 +1,6 @@
 {
   "name": "london_4kw_clear",
-  "description": "London, UK — single-array 4 kW DC south at 35° tilt (typical UK roof pitch). Validates the EU/UK provider path: engine routes to PVGIS (JRC SARAH/ERA5) while the oracle uses PVWatts v8 dataset=intl (NSRDB-International / ASHRAE TMY). Cross-implementation drift between two different data products is wider than the CONUS comparison band — ±5% may be tight; loosen if needed.",
+  "description": "London, UK — single-array 4 kW DC south at 35° tilt (typical UK roof pitch). Validates the EU/UK provider path: engine routes to PVGIS (JRC SARAH-2/ERA5) and the oracle is JRC's own PVcalc — the definitive European regional authority. Same data product family on both sides, so drift here is real engine-vs-source variance, not cross-product noise. Tolerance is provisional ±10% pending chart-solar-gi58 (engine routing PVcalc); tightens to ±5% once the engine matches the source.",
   "inputs": {
     "system": {
       "lat": 51.5074,
@@ -15,38 +15,35 @@
   "inputs_arrays": null,
   "oracle": {
     "production": {
-      "source": "pvwatts_v8",
-      "endpoint": "https://developer.nlr.gov/api/pvwatts/v8.json",
-      "fetched_at": "2026-05-02T21:06:27.755487Z",
+      "source": "pvgis_pvcalc_v52",
+      "endpoint": "https://re.jrc.ec.europa.eu/api/v5_2/PVcalc",
+      "fetched_at": "2026-05-02T23:48:50.418399Z",
       "requests": [
         {
           "lat": 51.5074,
           "lon": -0.1278,
-          "system_capacity_kw": 4.0,
-          "azimuth": 180.0,
-          "tilt": 35.0,
-          "array_type": 1,
-          "module_type": 0,
-          "losses_pct": 14.0,
-          "dataset": "intl"
+          "peakpower_kw": 4.0,
+          "angle_deg": 35.0,
+          "aspect_deg": 0.0,
+          "loss_pct": 14.0
         }
       ],
       "responses": [
         {
-          "ac_annual_kwh": 3681.036412624608,
+          "ac_annual_kwh": 4100.03,
           "ac_monthly_kwh": [
-            132.4645904627578,
-            165.6142741034982,
-            262.9206389112476,
-            403.1741118789154,
-            490.5200618833447,
-            451.7356780534353,
-            483.1821091192706,
-            459.8857496472253,
-            342.8255610925906,
-            252.9677079673059,
-            146.9013400407407,
-            88.84458946428184
+            161.66,
+            211.18,
+            352.41,
+            460.28,
+            487.02,
+            490.15,
+            498.92,
+            440.29,
+            385.83,
+            270.77,
+            191.75,
+            149.78
           ]
         }
       ]
@@ -55,7 +52,7 @@
   "expected": {
     "artifacts/engine.dc_production/annual_ac_kwh": {
       "kind": "scalar",
-      "value": 3681.036412624608,
+      "value": 4100.03,
       "tol_pct": 10.0
     }
   }

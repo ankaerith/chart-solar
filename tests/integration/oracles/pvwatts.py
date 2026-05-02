@@ -30,7 +30,7 @@ import httpx
 from ..harness.case import (
     Case,
     Oracle,
-    ProductionOracle,
+    PvwattsProductionOracle,
     PvwattsRequest,
     PvwattsResponseSlice,
     ScalarExpected,
@@ -179,7 +179,7 @@ def build_case(case_path: Path, api_key: str) -> Case:
     )
 
     case.oracle = Oracle(
-        production=ProductionOracle(
+        production=PvwattsProductionOracle(
             source="pvwatts_v8",
             endpoint=PVWATTS_ENDPOINT,
             fetched_at=datetime.now(UTC),

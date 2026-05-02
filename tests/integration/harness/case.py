@@ -76,25 +76,74 @@ class PvwattsResponseSlice(BaseModel):
     ac_monthly_kwh: list[float] = Field(..., min_length=12, max_length=12)
 
 
-class ProductionOracle(BaseModel):
-    """PVWatts-derived production oracle. One request/response pair per sub-array.
+class PvgisPvcalcRequest(BaseModel):
+    """One PVGIS PVcalc / seriescalc API call's parameters.
 
-    For multi-array cases, downstream code sums ``ac_annual_kwh`` and
-    element-wise sums ``ac_monthly_kwh`` across responses to produce
-    the system-level oracle.
+    JRC's API conventions differ from PVWatts:
+    - ``angle`` (not tilt). Same units, same meaning.
+    - ``aspect`` (not azimuth). **Convention is 0 = south, +90 = west,
+      −90 = east** — opposite of PVWatts where 0 = north, 180 = south.
+      The case-builder converts.
+    - ``peakpower`` in kW (not "system_capacity").
+    - ``loss`` is total system losses % (broadly equivalent to
+      PVWatts's ``losses``).
     """
 
-    source: Literal["pvwatts_v8"]
+    lat: float
+    lon: float
+    peakpower_kw: float
+    angle_deg: float
+    aspect_deg: float
+    loss_pct: float
+
+
+class PvgisPvcalcResponseSlice(BaseModel):
+    """The PVGIS PVcalc response fields the harness compares against.
+
+    PVcalc returns ``E_y`` (annual energy, kWh) and ``E_m`` per month
+    (kWh/month) inside ``outputs.totals.fixed`` and
+    ``outputs.monthly.fixed`` respectively.
+    """
+
+    ac_annual_kwh: float
+    ac_monthly_kwh: list[float] = Field(..., min_length=12, max_length=12)
+
+
+class PvwattsProductionOracle(BaseModel):
+    """PVWatts-v8-derived production oracle. One request/response pair per sub-array."""
+
+    source: Literal["pvwatts_v8"] = "pvwatts_v8"
     endpoint: str
     fetched_at: datetime
     requests: list[PvwattsRequest] = Field(..., min_length=1)
     responses: list[PvwattsResponseSlice] = Field(..., min_length=1)
 
 
+class PvgisProductionOracle(BaseModel):
+    """PVGIS-PVcalc-derived production oracle (JRC, the European regional authority).
+
+    Use this for UK/EU cases — it pairs JRC's reference physics with
+    JRC's data, the definitive EU standard. PVWatts.intl on the same
+    site uses ASHRAE TMY (different data product) and produces wider
+    drift that masks real engine-vs-source variance.
+    """
+
+    source: Literal["pvgis_pvcalc_v52"] = "pvgis_pvcalc_v52"
+    endpoint: str
+    fetched_at: datetime
+    requests: list[PvgisPvcalcRequest] = Field(..., min_length=1)
+    responses: list[PvgisPvcalcResponseSlice] = Field(..., min_length=1)
+
+
+#: Discriminated union over production-oracle sources. Pydantic 2 picks
+#: the variant from the ``source`` field automatically when loading.
+ProductionOracle = PvwattsProductionOracle | PvgisProductionOracle
+
+
 class Oracle(BaseModel):
     """Container for per-domain oracle data; extends as new oracles land."""
 
-    production: ProductionOracle | None = None
+    production: ProductionOracle | None = Field(default=None, discriminator="source")
 
 
 class Case(BaseModel):
