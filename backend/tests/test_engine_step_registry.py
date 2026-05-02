@@ -1,15 +1,11 @@
 """Step-registry audit: every Phase-1a engine step exposes its canonical
 entry point under an ``engine.<step>`` feature key.
 
-This is a registry-completeness check, not a behavioural one. The bead
-behind this test (chart-solar-nbwe) tracks an explicit list of step
-keys the pipeline expects to be able to look up. ADR 0006 supersedes
-``engine.cell_temperature`` and ``engine.clipping`` (handled inside
-``engine.dc_production`` by pvlib's ModelChain), and parks
-``engine.soiling`` / ``engine.snow`` until monthly precipitation /
-snowfall / RH columns land on ``TmyData`` — those four keys are
-asserted *absent* so a regression that re-introduces them shows up
-loudly.
+This is a registry-completeness check, not a behavioural one. ADR 0006
+supersedes ``engine.cell_temperature`` and ``engine.clipping`` (handled
+inside ``engine.dc_production`` by pvlib's ModelChain), and parks
+``engine.soiling`` until pvlib's HSU model gets PM2.5 / PM10 columns
+on ``TmyData``.
 """
 
 from __future__ import annotations
@@ -19,28 +15,27 @@ from backend.engine.registry import _STEPS, steps_for
 
 EXPECTED_KEYS: set[str] = {
     "engine.dc_production",
+    "engine.snow",
     "engine.degradation",
     "engine.tariff",
     "engine.export_credit",
     "engine.finance",
 }
 
-# Per ADR 0006 (and its supersession of chart-solar-5qe / chart-solar-p9l),
-# these steps must NOT register a top-level entry point: the physics is
-# inside `engine.dc_production`'s ModelChain run, and a separate step
-# would either no-op or double-count.
+# Per ADR 0006, these steps must NOT register a top-level entry point:
+# the physics is inside `engine.dc_production`'s ModelChain run, and a
+# separate step would either no-op or double-count.
 SUPERSEDED_KEYS: set[str] = {
     "engine.cell_temperature",
     "engine.clipping",
 }
 
-# Soiling and snow remain pipeline stubs until the irradiance providers
-# carry monthly precipitation / snowfall / RH (see ADR 0006). When the
-# data layer lands, drop these from this set and add the keys to
-# EXPECTED_KEYS — the audit test will then enforce the new contract.
+# Soiling stays deferred until the irradiance providers carry PM2.5 +
+# PM10 columns (pvlib's HSU model is the published soiling routine and
+# requires them). When the data layer lands, drop this from the set
+# and add the key to EXPECTED_KEYS.
 DEFERRED_KEYS: set[str] = {
     "engine.soiling",
-    "engine.snow",
 }
 
 
@@ -67,8 +62,8 @@ def test_deferred_keys_are_not_registered_yet() -> None:
     registered = _registered_keys()
     leaked = DEFERRED_KEYS & registered
     assert not leaked, (
-        "soiling / snow are stubs until pvlib-quality monthly weather "
-        f"inputs land — see ADR 0006: {sorted(leaked)}"
+        "engine.soiling is a stub until pvlib-quality PM2.5 / PM10 "
+        f"weather inputs land — see ADR 0006: {sorted(leaked)}"
     )
 
 

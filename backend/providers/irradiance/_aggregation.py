@@ -1,52 +1,21 @@
-"""Shared monthly-aggregation helpers for irradiance providers.
+"""Daily-bucket + provider-anchor helpers for irradiance adapters.
 
-Each adapter aggregates hourly / daily series into 12-month buckets to
-populate the optional ``TmyData`` fields the soiling + snow steps
-consume. Centralising the math here keeps every provider on the same
-calendar — non-leap months-per-day counts, January-anchored — so a
-mismatched-bucket bug can't slip into one adapter and silently diverge.
+The hourly-bucket calendar math (``HOURS_PER_MONTH_NON_LEAP``,
+``aggregate_hourly_to_monthly_mean``) lives in ``backend.domain.calendar``
+so the engine can share it without crossing the engine→providers
+import boundary; this module re-exports the symbols every adapter
+already imports from here, plus its own daily-aggregation +
+archive-anchor helpers that don't fit on the engine side.
 """
 
 from __future__ import annotations
 
 from datetime import date
 
-from backend.providers.irradiance import HOURS_PER_TMY
-
-#: Hours per month in a non-leap year, January-anchored. Mirrors the
-#: TMY anchor calendar (see ``backend.providers.irradiance``).
-HOURS_PER_MONTH_NON_LEAP: tuple[int, ...] = (
-    31 * 24,
-    28 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
-    30 * 24,
-    31 * 24,
+from backend.domain.calendar import HOURS_PER_MONTH_NON_LEAP as HOURS_PER_MONTH_NON_LEAP
+from backend.domain.calendar import (
+    aggregate_hourly_to_monthly_mean as aggregate_hourly_to_monthly_mean,
 )
-
-
-def aggregate_hourly_to_monthly_mean(values: list[float]) -> list[float]:
-    """Average an 8760-hour series into 12 monthly means.
-
-    Days-per-month is non-uniform; sum/count division below handles
-    that correctly (raw averaging would weight each month equally and
-    lose the short-Feb / long-summer skew).
-    """
-    if len(values) != HOURS_PER_TMY:
-        raise ValueError(f"hourly series must have {HOURS_PER_TMY} entries; got {len(values)}")
-    out: list[float] = []
-    cursor = 0
-    for hours in HOURS_PER_MONTH_NON_LEAP:
-        chunk = values[cursor : cursor + hours]
-        out.append(sum(chunk) / len(chunk))
-        cursor += hours
-    return out
 
 
 def aggregate_daily_to_monthly_sum(
