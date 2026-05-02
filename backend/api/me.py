@@ -58,15 +58,8 @@ async def patch_my_aggregation(
 ) -> dict[str, Any]:
     """Set the caller's aggregation opt-out flag (ADR 0005).
 
-    Flipping to ``opt_out=true`` cascades to mark every existing
-    ``installer_quotes`` row owned by the caller's audits with
-    ``aggregation_opt_in=false``; the next aggregate refresh excludes
-    them.
-
-    Flipping back to ``opt_out=false`` does **not** auto-resume
-    historical audits — only future audits write the default-on flag.
-    Idempotent: setting the value already in place is a no-op and
-    returns ``cascaded_rows=0``.
+    Cascade + no-auto-resume semantics live in
+    :func:`backend.services.audit_service.set_user_aggregation_opt_out`.
     """
     async with _db.SessionLocal() as session:
         result = await set_user_aggregation_opt_out(

@@ -54,11 +54,8 @@ class User(Base):
         nullable=False,
         server_default=func.now(),
     )
-    # Per-user override on ADR 0005's default-ON aggregation. Flipping
-    # this true cascades to ``installer_quotes.aggregation_opt_in``
-    # for every audit owned by the user (see ``audit_service``). No
-    # FK to audits yet — that lands with chart-solar-n9rn alongside
-    # the audits.user_id FK.
+    # Per-user override on ADR 0005's default-ON aggregation; cascade
+    # to ``installer_quotes.aggregation_opt_in`` lives in ``audit_service``.
     aggregation_opt_out: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
