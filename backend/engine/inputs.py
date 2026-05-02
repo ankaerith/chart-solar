@@ -40,6 +40,7 @@ __all__ = [
     "NemOneForOneConfig",
     "SegFlatConfig",
     "SegTouConfig",
+    "SnowGeometry",
     "SystemInputs",
     "TariffInputs",
 ]
@@ -144,12 +145,40 @@ ExportCreditConfig = Annotated[
 ]
 
 
+class SnowGeometry(BaseModel):
+    """Per-install snow-array geometry for Townsend's snow-loss model.
+
+    All three values feed into ``pvlib.snow.loss_townsend``: the loss
+    model is most sensitive to ``lower_edge_height_m`` on ground-mount
+    arrays where the value is closer to 0.3-0.5 m, vs ~2 m for
+    pitched-roof residential. Surfacing the values here lets installer-
+    quote extraction (chart-solar epic) flow per-install module + array
+    geometry through the engine. When ``SystemInputs.snow_geometry`` is
+    unset, the snow step falls back to residential-rooftop defaults
+    that match the previous hardcoded kwargs.
+    """
+
+    #: Slant height (m) of one row of modules — one tier of 60-cell
+    #: residential modules in portrait is ≈1.7 m. Townsend's model uses
+    #: this for the area available for snow to slide off.
+    slant_height_m: float = Field(..., gt=0, le=10)
+    #: Distance (m) from the array's lower edge to the surface the snow
+    #: piles against. For pitched-roof residential, eaves sit 2 m+ above
+    #: ground; ground-mounts are typically 0.3-0.5 m.
+    lower_edge_height_m: float = Field(..., ge=0, le=10)
+    #: Townsend's per-string adjustment. 1.0 for single-string arrays;
+    #: smaller fractions reduce the modeled loss for parallel strings
+    #: that share a snow shed-path.
+    string_factor: float = Field(..., gt=0, le=1.0)
+
+
 class SystemInputs(BaseModel):
     lat: float = Field(..., ge=-90, le=90)
     lon: float = Field(..., ge=-180, le=180)
     dc_kw: float = Field(..., gt=0, le=50)
     tilt_deg: float = Field(..., ge=0, le=90)
     azimuth_deg: float = Field(..., ge=0, le=360)
+    snow_geometry: SnowGeometry | None = None
 
 
 class LoanInputs(BaseModel):

@@ -22,6 +22,7 @@ from backend.engine.inputs import (
     ConsumptionInputs,
     FinancialInputs,
     ForecastInputs,
+    SnowGeometry,
     SystemInputs,
     TariffInputs,
 )
@@ -168,6 +169,90 @@ def test_pipeline_skips_snow_when_tmy_lacks_columns() -> None:
     result = run_forecast(inputs, tmy=tmy)
 
     assert "engine.snow" not in result.artifacts
+
+
+def test_ground_mount_geometry_increases_loss_vs_rooftop() -> None:
+    """Townsend's loss model is most sensitive to ``lower_edge_height``:
+    a ground-mount with a 0.4 m clearance has somewhere for snow to pile
+    up against the array, while a 2 m rooftop eave does not. With the
+    same monthly snow + RH inputs, the ground-mount geometry must
+    produce strictly larger monthly loss than the rooftop default.
+    """
+    snow = [20.0, 15.0, 8.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 8.0, 20.0]
+    rh = [70.0, 65.0, 60.0, 55.0, 60.0, 65.0, 70.0, 70.0, 65.0, 65.0, 70.0, 75.0]
+    tmy = _tmy_with_columns(snow=snow, rh=rh)
+    dc = _dc_for(tmy)
+
+    rooftop_system = SystemInputs(
+        lat=44.0,
+        lon=-72.5,
+        dc_kw=8.0,
+        tilt_deg=25,
+        azimuth_deg=180,
+    )
+    ground_mount_system = SystemInputs(
+        lat=44.0,
+        lon=-72.5,
+        dc_kw=8.0,
+        tilt_deg=25,
+        azimuth_deg=180,
+        snow_geometry=SnowGeometry(
+            slant_height_m=1.7,
+            lower_edge_height_m=0.4,  # ground-mount: snow piles against the array
+            string_factor=1.0,
+        ),
+    )
+
+    rooftop = run_snow_loss(tmy=tmy, system=rooftop_system, dc=dc)
+    ground_mount = run_snow_loss(tmy=tmy, system=ground_mount_system, dc=dc)
+
+    assert isinstance(rooftop, SnowLossResult)
+    assert isinstance(ground_mount, SnowLossResult)
+    # Ground-mount loss is strictly larger every snowy month; summer
+    # months sit at zero on both sides so we compare only winter.
+    assert ground_mount.monthly_loss_fraction[0] > rooftop.monthly_loss_fraction[0]
+    assert ground_mount.monthly_loss_fraction[11] > rooftop.monthly_loss_fraction[11]
+    # And the year-total reflects that.
+    assert ground_mount.adjusted_annual_ac_kwh < rooftop.adjusted_annual_ac_kwh
+
+
+def test_explicit_kwarg_overrides_system_snow_geometry() -> None:
+    """Explicit kwargs win over ``SystemInputs.snow_geometry``. This is
+    the legacy fallback path the bead pins — installer-quote extraction
+    flows values via the geometry block, but tests and one-off callers
+    can still pin the value at the call site.
+    """
+    snow = [20.0, 15.0, 8.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 8.0, 20.0]
+    rh = [70.0, 65.0, 60.0, 55.0, 60.0, 65.0, 70.0, 70.0, 65.0, 65.0, 70.0, 75.0]
+    tmy = _tmy_with_columns(snow=snow, rh=rh)
+    dc = _dc_for(tmy)
+
+    system_with_rooftop = SystemInputs(
+        lat=44.0,
+        lon=-72.5,
+        dc_kw=8.0,
+        tilt_deg=25,
+        azimuth_deg=180,
+        snow_geometry=SnowGeometry(
+            slant_height_m=1.7,
+            lower_edge_height_m=2.0,
+            string_factor=1.0,
+        ),
+    )
+
+    via_kwarg = run_snow_loss(
+        tmy=tmy,
+        system=system_with_rooftop,
+        dc=dc,
+        lower_edge_height_m=0.4,
+    )
+    via_geometry_only = run_snow_loss(tmy=tmy, system=system_with_rooftop, dc=dc)
+
+    assert isinstance(via_kwarg, SnowLossResult)
+    assert isinstance(via_geometry_only, SnowLossResult)
+    # Kwarg picked the ground-mount edge; geometry block is rooftop —
+    # so kwarg path produces strictly larger winter loss.
+    assert via_kwarg.monthly_loss_fraction[0] > via_geometry_only.monthly_loss_fraction[0]
 
 
 def test_dc_production_exposes_hourly_poa_for_downstream_consumers() -> None:
