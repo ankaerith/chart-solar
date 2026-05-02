@@ -7,8 +7,15 @@ import { Footer, NavBar, SunBackdrop } from "@/components/layout";
 
 export default function MarketingLayout({
   children,
+  modal,
 }: {
   children: ReactNode;
+  // Parallel-route slot — paired with `app/(marketing)/@modal/`.
+  // `default.tsx` returns null when no modal route is intercepted;
+  // `(.)<route>/page.tsx` files render the route as a modal overlay
+  // when navigated to from inside this layout. See
+  // `bd show chart-solar-2hf.1`.
+  modal: ReactNode;
 }) {
   return (
     <>
@@ -26,6 +33,7 @@ export default function MarketingLayout({
         </main>
         <Footer />
       </div>
+      {modal}
     </>
   );
 }
