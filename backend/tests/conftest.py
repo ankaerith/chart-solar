@@ -17,6 +17,7 @@ import backend.database as _db
 from backend.config import settings
 from backend.db import Base
 from backend.db.audit_models import Audit
+from backend.db.auth_models import User
 from backend.engine.inputs import (
     FinancialInputs,
     ForecastInputs,
@@ -154,8 +155,33 @@ async def db() -> AsyncIterator[Any]:
         await session.commit()
 
 
+async def make_user(
+    session: Any,
+    *,
+    user_id: uuid.UUID,
+    email: str | None = None,
+) -> None:
+    """Insert a User row with default aggregation_opt_out=False.
+
+    Idempotent — repeated calls for the same id are no-ops, so callers
+    that need a User as an FK target (audits.user_id, user_pii_vault.user_id)
+    can call this without tracking who's already been inserted. ``email``
+    defaults to a deterministic per-id value so callers that don't care
+    about the address don't have to invent one.
+    """
+    if await session.get(User, user_id) is not None:
+        return
+    session.add(User(id=user_id, email=email or f"user-{user_id}@example.com"))
+    await session.commit()
+
+
 async def make_audit(session: Any, *, owner: uuid.UUID) -> uuid.UUID:
-    """Insert a minimal audit row owned by ``owner`` and return its id."""
+    """Insert a minimal audit row owned by ``owner`` and return its id.
+
+    Seeds the ``users`` row first because ``audits.user_id`` carries an
+    FK (ON DELETE SET NULL) to it.
+    """
+    await make_user(session, user_id=owner)
     audit = Audit(user_id=owner, location_bucket="98101")
     session.add(audit)
     await session.commit()

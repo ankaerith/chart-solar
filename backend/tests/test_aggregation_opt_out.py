@@ -18,16 +18,10 @@ import backend.database as _db
 from backend.db.audit_models import Audit, Installer, InstallerQuote
 from backend.db.auth_models import User
 from backend.services.audit_service import set_user_aggregation_opt_out
-from backend.tests.conftest import ALICE_USER_ID, BOB_USER_ID
+from backend.tests.conftest import ALICE_USER_ID, BOB_USER_ID, make_user
 
 ALICE = ALICE_USER_ID
 BOB = BOB_USER_ID
-
-
-async def _make_user(session: Any, *, user_id: uuid.UUID, email: str) -> None:
-    """Insert a User row with default aggregation_opt_out=False."""
-    session.add(User(id=user_id, email=email))
-    await session.commit()
 
 
 async def _make_audit_with_quote(
@@ -36,6 +30,9 @@ async def _make_audit_with_quote(
     owner: uuid.UUID,
     aggregation_opt_in: bool = True,
 ) -> tuple[uuid.UUID, uuid.UUID]:
+    # audits.user_id has an FK to users (SET NULL); seed the row so
+    # tests that skip the explicit make_user step still insert cleanly.
+    await make_user(session, user_id=owner)
     audit = Audit(user_id=owner, location_bucket="98101")
     session.add(audit)
     await session.commit()
@@ -62,7 +59,7 @@ async def _make_audit_with_quote(
 async def test_new_user_defaults_to_aggregation_opted_in(db: Any) -> None:
     """``users.aggregation_opt_out`` defaults FALSE — the user is in by
     default, the column is the *override* not the consent."""
-    await _make_user(db, user_id=ALICE, email="alice@example.com")
+    await make_user(db, user_id=ALICE, email="alice@example.com")
     async with _db.SessionLocal() as session:
         row = await session.scalar(select(User).where(User.id == ALICE))
         assert row is not None
@@ -84,7 +81,7 @@ async def test_new_quote_defaults_to_aggregation_opted_in(db: Any) -> None:
 
 
 async def test_opt_out_flips_user_flag_and_cascades_to_quotes(db: Any) -> None:
-    await _make_user(db, user_id=ALICE, email="alice@example.com")
+    await make_user(db, user_id=ALICE, email="alice@example.com")
     audit_id, quote_id = await _make_audit_with_quote(db, owner=ALICE)
 
     async with _db.SessionLocal() as session:
@@ -104,8 +101,8 @@ async def test_opt_out_flips_user_flag_and_cascades_to_quotes(db: Any) -> None:
 
 async def test_opt_out_cascade_only_touches_callers_quotes(db: Any) -> None:
     """Bob's quote must not flip when Alice opts out."""
-    await _make_user(db, user_id=ALICE, email="alice@example.com")
-    await _make_user(db, user_id=BOB, email="bob@example.com")
+    await make_user(db, user_id=ALICE, email="alice@example.com")
+    await make_user(db, user_id=BOB, email="bob@example.com")
     _, alice_quote = await _make_audit_with_quote(db, owner=ALICE)
     _, bob_quote = await _make_audit_with_quote(db, owner=BOB)
 
@@ -125,7 +122,7 @@ async def test_re_flipping_to_opted_in_does_not_resume_historical_audits(
     db: Any,
 ) -> None:
     """ADR 0005: opt-in flip-back affects future audits only."""
-    await _make_user(db, user_id=ALICE, email="alice@example.com")
+    await make_user(db, user_id=ALICE, email="alice@example.com")
     _, quote_id = await _make_audit_with_quote(db, owner=ALICE)
 
     async with _db.SessionLocal() as session:
@@ -146,7 +143,7 @@ async def test_re_flipping_to_opted_in_does_not_resume_historical_audits(
 
 async def test_opt_out_is_idempotent(db: Any) -> None:
     """Setting the same value twice is a no-op on the second call."""
-    await _make_user(db, user_id=ALICE, email="alice@example.com")
+    await make_user(db, user_id=ALICE, email="alice@example.com")
     await _make_audit_with_quote(db, owner=ALICE)
 
     async with _db.SessionLocal() as session:
@@ -164,7 +161,7 @@ async def test_new_audit_after_opt_out_still_writes_default_on(db: Any) -> None:
     is what excludes the user (via the user flag). This pins ADR
     0005's "re-flipping doesn't auto-resume historical, but new audits
     write aggregation_opt_in=true again" semantic."""
-    await _make_user(db, user_id=ALICE, email="alice@example.com")
+    await make_user(db, user_id=ALICE, email="alice@example.com")
     async with _db.SessionLocal() as session:
         await set_user_aggregation_opt_out(session, user_id=str(ALICE), opt_out=True)
 
@@ -191,7 +188,7 @@ async def test_patch_aggregation_flips_and_cascades_via_route(
     db: Any,
     client_alice: TestClient,
 ) -> None:
-    await _make_user(db, user_id=ALICE, email="alice@example.com")
+    await make_user(db, user_id=ALICE, email="alice@example.com")
     _, quote_id = await _make_audit_with_quote(db, owner=ALICE)
 
     resp = client_alice.patch("/api/me/aggregation", json={"opt_out": True})
