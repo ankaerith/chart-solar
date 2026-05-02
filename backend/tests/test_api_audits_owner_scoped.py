@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 import backend.database as _db
 from backend.db.audit_models import Audit, InstallerQuote, UserPiiVault
-from backend.tests.conftest import ALICE_USER_ID, BOB_USER_ID, make_audit
+from backend.tests.conftest import ALICE_USER_ID, BOB_USER_ID, make_audit, make_user
 
 ALICE = ALICE_USER_ID
 BOB = BOB_USER_ID
@@ -150,6 +150,7 @@ async def test_delete_pii_drops_vault_rows_and_audit_link_becomes_null(
     db: Any,
     client_alice: TestClient,
 ) -> None:
+    await make_user(db, user_id=ALICE)
     vault = UserPiiVault(
         user_id=ALICE,
         full_name="Alice Anderson",
@@ -181,6 +182,7 @@ async def test_delete_pii_replay_is_idempotent(
     db: Any,
     client_alice: TestClient,
 ) -> None:
+    await make_user(db, user_id=ALICE)
     vault = UserPiiVault(user_id=ALICE, email="alice@example.com")
     db.add(vault)
     await db.commit()
@@ -195,6 +197,8 @@ async def test_delete_pii_only_drops_callers_rows(
     db: Any,
     client_alice: TestClient,
 ) -> None:
+    await make_user(db, user_id=ALICE)
+    await make_user(db, user_id=BOB)
     db.add(UserPiiVault(user_id=ALICE, email="alice@example.com"))
     db.add(UserPiiVault(user_id=BOB, email="bob@example.com"))
     await db.commit()

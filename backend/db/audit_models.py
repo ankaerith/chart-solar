@@ -11,10 +11,10 @@ cascades flip the column to false, which propagates through the public
 binding because it's read-only and the column set will evolve as the
 ``financials`` JSONB schema firms up).
 
-There is no FK to a ``users`` table here yet — the auth migration is gated
-on chart-solar-bcy and lands later. ``user_id`` columns are typed UUID and
-indexed for lookup; the FK constraint will be added once the users table
-exists. Treat them as logical-only references for now.
+The FK from ``audits.user_id`` and ``user_pii_vault.user_id`` to ``users.id``
+lands in migration ``9a1b2c3d4e5f`` (chart-solar-n9rn). The cascade policies
+are asymmetric: audits SET NULL (anonymized payload survives the account
+delete) while user_pii_vault CASCADE (PII purges with the user).
 """
 
 from __future__ import annotations
@@ -83,7 +83,12 @@ class UserPiiVault(Base):
     __tablename__ = "user_pii_vault"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     full_name: Mapped[str | None] = mapped_column(String(512))
     address_full: Mapped[str | None] = mapped_column(String(1024))
     phone: Mapped[str | None] = mapped_column(String(64))
@@ -107,7 +112,11 @@ class Audit(Base):
     __tablename__ = "audits"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
