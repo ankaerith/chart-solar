@@ -48,7 +48,15 @@ DEFAULT_LOSSES_PCT = 14.0  # PVWatts canonical default (wiring + soiling + age +
 #: Annual is tighter than monthly because monthly-shape drift between
 #: two PVWatts implementations (or weather-year edge cases) is larger
 #: than the annual roll-up. Override per case if needed.
-DEFAULT_PRODUCTION_TOL_ANNUAL_PCT = 5.0
+#:
+#: CONUS uses ``tmy3`` (PVWatts) vs pvlib-on-NSRDB (engine) — same
+#: data product family; 5 % is achievable. Non-CONUS uses ``intl``
+#: (PVWatts: ASHRAE TMY) vs pvlib-on-PVGIS (engine: JRC SARAH/ERA5)
+#: — two unrelated reanalysis products with known mid-single-digit
+#: drift in cloudy/temperate climates. 10 % captures that without
+#: hiding real engine regressions.
+DEFAULT_PRODUCTION_TOL_ANNUAL_PCT_CONUS = 5.0
+DEFAULT_PRODUCTION_TOL_ANNUAL_PCT_INTL = 10.0
 DEFAULT_PRODUCTION_TOL_MONTHLY_PCT = 8.0
 
 
@@ -93,20 +101,44 @@ def fetch_pvwatts(
     )
 
 
+def _select_dataset(lat: float, lon: float) -> str:
+    """PVWatts dataset selection — auto-route based on lat/lon.
+
+    ``tmy3`` is CONUS-only (PVWatts uses ~1020 NSRDB TMY3 weather
+    stations in the contiguous US). For everywhere else — Alaska,
+    Hawaii, UK, EU, rest of world — ``intl`` falls back to
+    NSRDB-International / ASHRAE TMY data: global coverage at a
+    coarser grid.
+
+    Note: this picks the *oracle* data source, not the engine's. The
+    engine reads from its own irradiance providers (NSRDB → PVGIS →
+    Open-Meteo) per ``backend.providers.irradiance.pick_provider``.
+    Cross-implementation drift between PVWatts.intl (ASHRAE TMY) and
+    PVGIS (JRC SARAH/ERA5) is wider than the CONUS PVWatts.tmy3 ↔
+    pvlib-on-NSRDB drift, so non-CONUS cases may need a wider
+    tolerance.
+    """
+    is_conus = 24.0 <= lat <= 49.5 and -125.0 <= lon <= -66.5
+    return "tmy3" if is_conus else "intl"
+
+
 def _request_from_inputs(inputs: dict[str, Any]) -> PvwattsRequest:
     """Derive a single-array PVWatts request from a forecast inputs body."""
     system = inputs.get("system")
     if not isinstance(system, dict):
         raise ValueError("case inputs missing `system` block")
+    lat = float(system["lat"])
+    lon = float(system["lon"])
     return PvwattsRequest(
-        lat=float(system["lat"]),
-        lon=float(system["lon"]),
+        lat=lat,
+        lon=lon,
         system_capacity_kw=float(system["dc_kw"]),
         azimuth=float(system["azimuth_deg"]),
         tilt=float(system["tilt_deg"]),
         array_type=DEFAULT_ARRAY_TYPE,
         module_type=DEFAULT_MODULE_TYPE,
         losses_pct=DEFAULT_LOSSES_PCT,
+        dataset=_select_dataset(lat, lon),
     )
 
 
@@ -135,6 +167,16 @@ def build_case(case_path: Path, api_key: str) -> Case:
     requests = [_request_from_inputs(sub) for sub in sub_inputs]
     responses = [fetch_pvwatts(api_key, req) for req in requests]
     summed_annual = sum(r.ac_annual_kwh for r in responses)
+
+    # Pick tolerance from the dataset of the first request — multi-pass
+    # cases at the same lat/lon all use the same dataset; a future
+    # cross-region multi-pass case would need a more careful rule, but
+    # we don't have one yet.
+    tol_pct = (
+        DEFAULT_PRODUCTION_TOL_ANNUAL_PCT_CONUS
+        if requests[0].dataset == "tmy3"
+        else DEFAULT_PRODUCTION_TOL_ANNUAL_PCT_INTL
+    )
 
     case.oracle = Oracle(
         production=ProductionOracle(
@@ -167,7 +209,7 @@ def build_case(case_path: Path, api_key: str) -> Case:
     # so this path resolves the same way for single- and multi-pass.
     case.expected["artifacts/engine.dc_production/annual_ac_kwh"] = ScalarExpected(
         value=summed_annual,
-        tol_pct=DEFAULT_PRODUCTION_TOL_ANNUAL_PCT,
+        tol_pct=tol_pct,
     )
     # Monthly comparison is deferred: the engine emits ``hourly_ac_kw``
     # (8760-long), not a 12-vector, so a direct comparison would need
