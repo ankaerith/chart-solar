@@ -30,10 +30,7 @@ from backend.providers.irradiance.nsrdb import NsrdbProvider
 
 @pytest.fixture(autouse=True)
 def _reset_breakers() -> Iterator[None]:
-    """The ``era5_land`` breaker is module-level state shared across
-    every test in this file (and the PVGIS sibling file). Reset around
-    each test so a deliberate-failure case doesn't poison the next
-    test's success path."""
+    """Module-level breakers leak across tests; reset to isolate failures."""
     reset_breakers()
     yield
     reset_breakers()
@@ -173,7 +170,7 @@ async def test_nsrdb_fetch_skips_sibling_when_sibling_disabled(
         async def fetch_monthly_aggregates(self, lat: float, lon: float) -> Era5LandAggregates:
             return Era5LandAggregates()
 
-    provider = NsrdbProvider(api_key="x", user_email="x@x", sibling=_NoOpSibling())  # type: ignore[arg-type]
+    provider = NsrdbProvider(api_key="x", user_email="x@x", sibling=_NoOpSibling())
     tmy = await provider.fetch_tmy(40.0, -105.0)
     assert tmy.precipitation_mm_per_month is None
     assert tmy.snowfall_cm_per_month is None

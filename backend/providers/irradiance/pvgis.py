@@ -13,26 +13,26 @@ Monthly aggregates: PVGIS's `RH` column populates
 ``relative_humidity_pct_per_month`` so the HSU soiling step runs on
 UK/EU sites without a sibling provider call. PVGIS does *not* carry
 surface precipitation or snowfall — those come from the ``era5_land``
-sibling adapter (chart-solar-p559), which the constructor accepts as a
-DI seam. ``Era5LandProvider`` is the default; a sibling failure logs
-but doesn't break the audit (the engine snow / soiling-precip paths
-already no-op when the monthly fields are unset).
+sibling adapter (chart-solar-p559) which the constructor accepts as a
+DI seam. The primary fetch and the sibling fetch run concurrently;
+sibling failure logs but doesn't break the audit.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from backend.infra.http import make_get
 from backend.infra.util import utc_now
 from backend.providers.irradiance import HOURS_PER_TMY, IrradianceSource, TmyData
 from backend.providers.irradiance._aggregation import aggregate_hourly_to_monthly_mean
-from backend.providers.irradiance.era5_land import Era5LandProvider
+from backend.providers.irradiance.era5_land import (
+    Era5LandProvider,
+    Era5LandSibling,
+    fetch_aggregates_with_primary,
+)
 
 PVGIS_TMY_URL = "https://re.jrc.ec.europa.eu/api/v5_2/tmy"
-
-_logger = logging.getLogger(__name__)
 
 
 class PvgisProvider:
@@ -40,13 +40,19 @@ class PvgisProvider:
 
     name: IrradianceSource = "pvgis"
 
-    def __init__(self, *, sibling: Era5LandProvider | None = None) -> None:
+    def __init__(self, *, sibling: Era5LandSibling | None = None) -> None:
         self._get = make_get(service="pvgis")
-        # ``sibling`` is omitted only by tests that want to verify the
-        # PVGIS-only path; production wiring always uses the default.
-        self._sibling = sibling if sibling is not None else Era5LandProvider()
+        self._sibling: Era5LandSibling = sibling if sibling is not None else Era5LandProvider()
 
     async def fetch_tmy(self, lat: float, lon: float) -> TmyData:
+        return await fetch_aggregates_with_primary(
+            self._sibling,
+            self._fetch_pvgis(lat, lon),
+            lat=lat,
+            lon=lon,
+        )
+
+    async def _fetch_pvgis(self, lat: float, lon: float) -> TmyData:
         response = await self._get(
             PVGIS_TMY_URL,
             params={
@@ -55,35 +61,7 @@ class PvgisProvider:
                 "outputformat": "json",
             },
         )
-        tmy = parse_pvgis_json(response.json(), source_lat=lat, source_lon=lon)
-        return await self._merge_sibling(tmy, lat=lat, lon=lon)
-
-    async def _merge_sibling(self, tmy: TmyData, *, lat: float, lon: float) -> TmyData:
-        """Augment the PVGIS TMY with the ERA5-Land sibling's monthly
-        precipitation + snowfall, if the sibling responds.
-
-        A sibling failure must not break the primary fetch — the
-        homeowner's audit doesn't depend on snow/precip — so on any
-        exception we log and return ``tmy`` unchanged. The engine's
-        soiling / snow steps already no-op when those fields are unset.
-        """
-        try:
-            agg = await self._sibling.fetch_monthly_aggregates(lat, lon)
-        except Exception:
-            _logger.warning(
-                "era5_land sibling fetch failed at (%.4f, %.4f); "
-                "leaving precip + snow fields unset",
-                lat,
-                lon,
-                exc_info=True,
-            )
-            return tmy
-        return tmy.model_copy(
-            update={
-                "precipitation_mm_per_month": agg.precipitation_mm_per_month,
-                "snowfall_cm_per_month": agg.snowfall_cm_per_month,
-            }
-        )
+        return parse_pvgis_json(response.json(), source_lat=lat, source_lon=lon)
 
 
 def parse_pvgis_json(

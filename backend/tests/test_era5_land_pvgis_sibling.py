@@ -23,9 +23,7 @@ from backend.providers.irradiance.pvgis import PvgisProvider
 
 @pytest.fixture(autouse=True)
 def _reset_breakers() -> Iterator[None]:
-    """The ``era5_land`` and ``pvgis`` breakers are module-level state
-    shared across every test in this file. Reset around each test so a
-    deliberate-failure case doesn't poison the next test's success."""
+    """Module-level breakers leak across tests; reset to isolate failures."""
     reset_breakers()
     yield
     reset_breakers()
@@ -105,7 +103,7 @@ async def test_pvgis_fetch_skips_sibling_when_sibling_disabled(
         async def fetch_monthly_aggregates(self, lat: float, lon: float) -> Era5LandAggregates:
             return Era5LandAggregates()
 
-    provider = PvgisProvider(sibling=_NoOpSibling())  # type: ignore[arg-type]
+    provider = PvgisProvider(sibling=_NoOpSibling())
     tmy = await provider.fetch_tmy(51.5074, -0.1278)
     assert tmy.precipitation_mm_per_month is None
     assert tmy.snowfall_cm_per_month is None

@@ -11,7 +11,6 @@ most recently completed calendar year hourly.
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
 from backend.infra.http import make_get
@@ -20,6 +19,7 @@ from backend.providers.irradiance import HOURS_PER_TMY, IrradianceSource, TmyDat
 from backend.providers.irradiance._aggregation import (
     aggregate_daily_to_monthly_sum,
     aggregate_hourly_to_monthly_mean,
+    representative_archive_year,
 )
 
 OPENMETEO_FREE_URL = "https://archive-api.open-meteo.com/v1/archive"
@@ -50,7 +50,7 @@ class OpenMeteoProvider:
             raise RuntimeError(
                 "OpenMeteoProvider: paid tier enabled but `openmeteo_paid_api_key` is unset"
             )
-        year = _representative_year()
+        year = representative_archive_year()
         params: dict[str, Any] = {
             "latitude": lat,
             "longitude": lon,
@@ -137,12 +137,6 @@ def parse_openmeteo_json(
 
 def _channel(hourly: dict[str, Any], key: str) -> list[float]:
     return [float(v or 0.0) for v in hourly.get(key, [])]
-
-
-def _representative_year() -> int:
-    # Open-Meteo's archive lags by a few days, so the most recently
-    # completed calendar year is the safe choice.
-    return date.today().year - 1
 
 
 def _drop_feb29(series: list[float]) -> list[float]:
