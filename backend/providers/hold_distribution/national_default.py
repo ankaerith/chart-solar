@@ -9,7 +9,7 @@ forced to live with the median.
 
 from __future__ import annotations
 
-from backend.engine.finance.sale import HoldYearProbability
+from backend.domain.hold import HoldYearProbability
 from backend.providers.hold_distribution import (
     DEFAULT_HOLD_SIGMA_YEARS,
     DEFAULT_MEDIAN_HOLD_YEARS,

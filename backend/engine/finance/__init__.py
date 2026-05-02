@@ -40,8 +40,6 @@ from backend.engine.finance.opportunity_cost import (
     cumulative_solar_wealth,
 )
 from backend.engine.finance.sale import (
-    HoldYearProbability,
-    SaleScenarioInputs,
     SaleScenarioOutcome,
     SaleScenarioResult,
     expected_sale_npv,
@@ -53,10 +51,8 @@ __all__ = [
     "AmortizationSchedule",
     "CapitalAllocationBaseline",
     "HYSA_BASELINE",
-    "HoldYearProbability",
     "MORTGAGE_PAYDOWN_BASELINE",
     "SP500_BASELINE",
-    "SaleScenarioInputs",
     "SaleScenarioOutcome",
     "SaleScenarioResult",
     "alternative_wealth_path",
