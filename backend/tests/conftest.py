@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 import asyncio
-from collections.abc import Iterator
+import uuid
+from collections.abc import AsyncIterator, Iterator
+from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -9,12 +14,15 @@ from sqlalchemy.pool import NullPool
 import backend.database as _db
 from backend.config import settings
 from backend.db import Base
+from backend.db.audit_models import Audit
 from backend.engine.inputs import (
     FinancialInputs,
     ForecastInputs,
     SystemInputs,
     TariffInputs,
 )
+from backend.entitlements.guards import current_user_id
+from backend.main import app
 
 #: Materialized views the audit migration adds. ``Base.metadata`` doesn't
 #: track these (matviews aren't ORM tables), so ``drop_all`` would fail
@@ -25,6 +33,12 @@ _MATERIALIZED_VIEWS: tuple[str, ...] = (
     "region_pricing_aggregates",
     "installer_internal_stats",
 )
+
+#: Stable per-session test users. Auth tests pin Alice and Bob via the
+#: ``current_user_id`` dependency override so route-level access checks
+#: see two distinct subjects without going through magic-link auth.
+ALICE_USER_ID = uuid.uuid4()
+BOB_USER_ID = uuid.uuid4()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -92,3 +106,55 @@ def example_inputs() -> ForecastInputs:
         financial=FinancialInputs(),
         tariff=TariffInputs(country="US"),
     )
+
+
+@pytest.fixture
+def client_alice() -> Iterator[TestClient]:
+    """TestClient pinned to ALICE_USER_ID via dependency override."""
+    app.dependency_overrides[current_user_id] = lambda: str(ALICE_USER_ID)
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.pop(current_user_id, None)
+
+
+@pytest.fixture
+def client_bob() -> Iterator[TestClient]:
+    """TestClient pinned to BOB_USER_ID via dependency override."""
+    app.dependency_overrides[current_user_id] = lambda: str(BOB_USER_ID)
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.pop(current_user_id, None)
+
+
+@pytest.fixture
+def client_anonymous() -> Iterator[TestClient]:
+    """TestClient with no override — the auth dep sees the anonymous sentinel."""
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture
+async def db() -> AsyncIterator[Any]:
+    """Per-test session that cleans the audit + user tables on exit.
+
+    The cleanup sweep covers ``installer_quotes`` (FK to audits),
+    ``audits``, ``user_pii_vault``, and ``users`` so Alice/Bob row
+    pollution stays contained as more tests adopt the fixture.
+    """
+    if _db.SessionLocal is None:
+        pytest.skip("Postgres unavailable for integration tests")
+    async with _db.SessionLocal() as session:
+        yield session
+        await session.execute(text("DELETE FROM installer_quotes"))
+        await session.execute(text("DELETE FROM audits"))
+        await session.execute(text("DELETE FROM user_pii_vault"))
+        await session.execute(text("DELETE FROM users"))
+        await session.commit()
+
+
+async def make_audit(session: Any, *, owner: uuid.UUID) -> uuid.UUID:
+    """Insert a minimal audit row owned by ``owner`` and return its id."""
+    audit = Audit(user_id=owner, location_bucket="98101")
+    session.add(audit)
+    await session.commit()
+    return audit.id
