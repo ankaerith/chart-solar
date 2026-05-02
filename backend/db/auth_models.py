@@ -25,7 +25,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -53,6 +53,13 @@ class User(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+    # Per-user override on ADR 0005's default-ON aggregation; cascade
+    # to ``installer_quotes.aggregation_opt_in`` lives in ``audit_service``.
+    aggregation_opt_out: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
     )
 
 

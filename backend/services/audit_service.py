@@ -25,11 +25,12 @@ from __future__ import annotations
 import uuid
 from typing import Any, cast
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.audit_models import Audit, UserPiiVault
+from backend.db.audit_models import Audit, InstallerQuote, UserPiiVault
+from backend.db.auth_models import User
 from backend.infra.logging import get_logger
 
 _log = get_logger(__name__)
@@ -108,6 +109,68 @@ async def delete_pii_vault_for_user(
     return rows
 
 
+async def set_user_aggregation_opt_out(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    opt_out: bool,
+) -> dict[str, int | bool]:
+    """Set ``users.aggregation_opt_out`` and cascade if flipping to true.
+
+    On a flip to ``True`` the user's existing ``installer_quotes`` rows
+    have ``aggregation_opt_in`` cleared so the next aggregate refresh
+    excludes them — the matview's ``WHERE aggregation_opt_in = TRUE``
+    clause does the rest.
+
+    Re-flipping to ``False`` does **not** auto-resume historical audits
+    (per ADR 0005). The user signals "include my future audits"; what
+    they previously sent is left where the prior decision put it. New
+    audits write ``aggregation_opt_in = TRUE`` from the column default,
+    which is unaffected here.
+
+    Returns a small status payload the route layer surfaces verbatim:
+    the new flag value plus the number of cascade rows touched (always
+    0 on a flip-to-False; ≥0 on a flip-to-True depending on prior writes).
+    Calling with the value already set is a no-op — no rows updated,
+    no audit log emitted, ``cascaded_rows`` is 0.
+    """
+    user_uuid = _coerce_user_uuid(user_id)
+
+    flip_user = (
+        update(User)
+        .where(User.id == user_uuid, User.aggregation_opt_out.is_not(opt_out))
+        .values(aggregation_opt_out=opt_out)
+    )
+    user_result = cast(CursorResult[Any], await session.execute(flip_user))
+    user_changed = (user_result.rowcount or 0) > 0
+    if not user_changed:
+        await session.commit()
+        return {"opt_out": opt_out, "cascaded_rows": 0}
+
+    cascaded_rows = 0
+    if opt_out:
+        owned_audit_ids = select(Audit.id).where(Audit.user_id == user_uuid)
+        cascade = (
+            update(InstallerQuote)
+            .where(
+                InstallerQuote.audit_id.in_(owned_audit_ids),
+                InstallerQuote.aggregation_opt_in.is_(True),
+            )
+            .values(aggregation_opt_in=False)
+        )
+        cascade_result = cast(CursorResult[Any], await session.execute(cascade))
+        cascaded_rows = cascade_result.rowcount or 0
+
+    await session.commit()
+    _log.info(
+        "aggregation.opt_out_set",
+        user_id=user_id,
+        opt_out=opt_out,
+        cascaded_rows=cascaded_rows,
+    )
+    return {"opt_out": opt_out, "cascaded_rows": cascaded_rows}
+
+
 def _coerce_user_uuid(user_id: str) -> uuid.UUID:
     """``user_id`` is typed as ``str`` at the API layer (Phase 2 will
     keep that — JWT subjects are strings) but the column is UUID. We
@@ -123,4 +186,5 @@ __all__ = [
     "delete_audit_owned_by",
     "delete_pii_vault_for_user",
     "find_audit_owned_by",
+    "set_user_aggregation_opt_out",
 ]
