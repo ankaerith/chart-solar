@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ScalarExpected(BaseModel):
@@ -100,17 +100,39 @@ class Oracle(BaseModel):
 class Case(BaseModel):
     """A complete integration-test case.
 
-    `inputs` is the raw request body passed to ``POST /api/forecast``.
-    The harness validates it as ``dict[str, Any]`` so the API itself
-    is the contract; a typo in the inputs produces a 422 from FastAPI
-    rather than a silent in-process Pydantic miss.
+    Exactly one of ``inputs`` or ``inputs_arrays`` is set:
+
+    - ``inputs`` (dict): single-pass case — body POSTed to ``/api/forecast``
+      verbatim, single result compared against ``expected``.
+    - ``inputs_arrays`` (list[dict]): multi-pass case — each entry is
+      submitted as its own forecast, the harness sums production
+      results across runs, then compares the summed result against
+      ``expected``. Workaround until ``chart-solar-h3y6`` lands
+      multi-array support in ``SystemInputs``; once that does, these
+      cases collapse back to single-pass.
+
+    Both forms validate as ``dict[str, Any]`` (not a typed
+    ``ForecastInputs``) so the API itself is the contract — a typo
+    in the inputs produces a 422 from FastAPI rather than a silent
+    in-process Pydantic miss.
     """
 
     name: str
     description: str = ""
-    inputs: dict[str, Any]
+    inputs: dict[str, Any] | None = None
+    inputs_arrays: list[dict[str, Any]] | None = None
     oracle: Oracle = Field(default_factory=Oracle)
     expected: dict[str, ExpectedMetric] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _exactly_one_inputs_form(self) -> Case:
+        if (self.inputs is None) == (self.inputs_arrays is None):
+            raise ValueError(
+                "Case requires exactly one of `inputs` or `inputs_arrays` (not both / not neither)"
+            )
+        if self.inputs_arrays is not None and len(self.inputs_arrays) < 2:
+            raise ValueError("`inputs_arrays` must have ≥ 2 entries; use `inputs` for single-pass")
+        return self
 
     @classmethod
     def load(cls, path: Path) -> Case:

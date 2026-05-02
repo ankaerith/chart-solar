@@ -22,6 +22,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -75,6 +76,9 @@ def _format_report(report: CaseReport) -> str:
 async def _run_one(
     client: httpx.AsyncClient, base_url: str, case: Case, timeout_s: float
 ) -> CaseReport:
+    if case.inputs_arrays is not None:
+        return await _run_multi_pass(client, base_url, case, timeout_s)
+    assert case.inputs is not None  # validator guarantees exactly one is set
     try:
         body = await run_case(client, base_url, case.inputs, timeout_s=timeout_s)
     except ForecastTimeoutError as exc:
@@ -84,6 +88,60 @@ async def _run_one(
     except httpx.HTTPError as exc:
         return _synthesize_fail(case, f"HTTP error: {exc}")
     return compare(case, body)
+
+
+async def _run_multi_pass(
+    client: httpx.AsyncClient, base_url: str, case: Case, timeout_s: float
+) -> CaseReport:
+    """Submit each sub-array's inputs, sum production, compare summed result.
+
+    Workaround for cases like Seattle (4.4 kW N + 16.28 kW S) where the
+    real system spans multiple arrays but the engine's ``SystemInputs``
+    is single-array (chart-solar-h3y6). Each entry in ``inputs_arrays``
+    is a complete forecast body; we run them serially (idempotency
+    keys are body-hashed, so distinct bodies don't collide), then
+    element-wise-sum hourly_ac_kw and total annual_ac_kwh into a
+    synthetic ``engine.dc_production`` block for the comparator.
+    """
+    assert case.inputs_arrays is not None  # _run_one branched on this
+    bodies: list[dict[str, Any]] = []
+    for sub_inputs in case.inputs_arrays:
+        try:
+            body = await run_case(client, base_url, sub_inputs, timeout_s=timeout_s)
+        except ForecastTimeoutError as exc:
+            return _synthesize_fail(case, f"sub-array timeout: {exc}")
+        except ForecastFailedError as exc:
+            return _synthesize_fail(case, f"sub-array failed: {exc}")
+        except httpx.HTTPError as exc:
+            return _synthesize_fail(case, f"sub-array HTTP error: {exc}")
+        bodies.append(body)
+    return compare(case, _merge_dc_production(bodies))
+
+
+def _merge_dc_production(bodies: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a synthetic forecast result whose ``engine.dc_production``
+    sums hourly + annual AC across N sub-array runs.
+
+    Only the production block is summed — other artifacts (snow,
+    finance, tariff) don't have a sensible per-array decomposition
+    in the multi-pass workaround, so they're omitted from the
+    synthetic result. Cases with multi-pass inputs should only assert
+    on production paths until chart-solar-h3y6 lands.
+    """
+    dc_blocks = [b["result"]["artifacts"]["engine.dc_production"] for b in bodies]
+    hourly_lists = [d["hourly_ac_kw"] for d in dc_blocks]
+    summed_hourly = [sum(values) for values in zip(*hourly_lists, strict=True)]
+    summed_annual = sum(d["annual_ac_kwh"] for d in dc_blocks)
+    return {
+        "result": {
+            "artifacts": {
+                "engine.dc_production": {
+                    "annual_ac_kwh": summed_annual,
+                    "hourly_ac_kw": summed_hourly,
+                }
+            }
+        }
+    }
 
 
 def _synthesize_fail(case: Case, detail: str) -> CaseReport:

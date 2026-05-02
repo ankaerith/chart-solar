@@ -94,13 +94,7 @@ def fetch_pvwatts(
 
 
 def _request_from_inputs(inputs: dict[str, Any]) -> PvwattsRequest:
-    """Derive a single-array PVWatts request from the case's inputs.system block.
-
-    Multi-array cases will need to declare oracle-side arrays
-    explicitly (separate from `inputs.system`, which is single-array
-    until chart-solar-h3y6 lands). This builder raises rather than
-    silently picking one when that day comes.
-    """
+    """Derive a single-array PVWatts request from a forecast inputs body."""
     system = inputs.get("system")
     if not isinstance(system, dict):
         raise ValueError("case inputs missing `system` block")
@@ -123,18 +117,32 @@ def build_case(case_path: Path, api_key: str) -> Case:
     production entries in ``expected``. Re-run on demand when PVWatts
     publishes a new TMY3 dataset version or the case's geometry
     changes — the case file's git diff is the audit trail.
+
+    Single-pass cases (``case.inputs``) issue one PVWatts request.
+    Multi-pass cases (``case.inputs_arrays``) issue one per sub-array
+    and write all requests + responses into the oracle so the case
+    file is reproducible end-to-end. The expected annual is the
+    summed annual across sub-arrays.
     """
     case = Case.load(case_path)
-    request = _request_from_inputs(case.inputs)
-    response = fetch_pvwatts(api_key, request)
+
+    if case.inputs_arrays is not None:
+        sub_inputs = case.inputs_arrays
+    else:
+        assert case.inputs is not None  # validator guarantees one is set
+        sub_inputs = [case.inputs]
+
+    requests = [_request_from_inputs(sub) for sub in sub_inputs]
+    responses = [fetch_pvwatts(api_key, req) for req in requests]
+    summed_annual = sum(r.ac_annual_kwh for r in responses)
 
     case.oracle = Oracle(
         production=ProductionOracle(
             source="pvwatts_v8",
             endpoint=PVWATTS_ENDPOINT,
             fetched_at=datetime.now(UTC),
-            requests=[request],
-            responses=[response],
+            requests=requests,
+            responses=responses,
         )
     )
 
@@ -154,8 +162,11 @@ def build_case(case_path: Path, api_key: str) -> Case:
     # Slash-separated path: walks ``result.artifacts``, then the literal
     # feature key ``engine.dc_production`` (which contains dots — that's
     # why the comparator's path syntax uses ``/`` rather than ``.``).
+    # For multi-pass cases the engine outputs are summed in-harness
+    # before reaching the comparator (see ``_merge_dc_production``),
+    # so this path resolves the same way for single- and multi-pass.
     case.expected["artifacts/engine.dc_production/annual_ac_kwh"] = ScalarExpected(
-        value=response.ac_annual_kwh,
+        value=summed_annual,
         tol_pct=DEFAULT_PRODUCTION_TOL_ANNUAL_PCT,
     )
     # Monthly comparison is deferred: the engine emits ``hourly_ac_kw``

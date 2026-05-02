@@ -1,0 +1,103 @@
+{
+  "name": "seattle_dual_array_2pass",
+  "description": "Seattle, WA — dual-array reference: 4.4 kW DC north / 10° + 16.28 kW DC south / 10° at SeaTac canonical TMY3 (47.45, -122.31). 2-pass workaround: each sub-array is submitted as its own forecast and the harness sums production results before comparing. Tracks chart-solar-h3y6 — once SystemInputs gains multi-array support, this case collapses to a single-pass run.",
+  "inputs": null,
+  "inputs_arrays": [
+    {
+      "system": {
+        "lat": 47.45,
+        "lon": -122.31,
+        "dc_kw": 4.4,
+        "tilt_deg": 10.0,
+        "azimuth_deg": 0.0
+      },
+      "financial": {},
+      "tariff": {}
+    },
+    {
+      "system": {
+        "lat": 47.45,
+        "lon": -122.31,
+        "dc_kw": 16.28,
+        "tilt_deg": 10.0,
+        "azimuth_deg": 180.0
+      },
+      "financial": {},
+      "tariff": {}
+    }
+  ],
+  "oracle": {
+    "production": {
+      "source": "pvwatts_v8",
+      "endpoint": "https://developer.nlr.gov/api/pvwatts/v8.json",
+      "fetched_at": "2026-05-02T20:31:02.491573Z",
+      "requests": [
+        {
+          "lat": 47.45,
+          "lon": -122.31,
+          "system_capacity_kw": 4.4,
+          "azimuth": 0.0,
+          "tilt": 10.0,
+          "array_type": 1,
+          "module_type": 0,
+          "losses_pct": 14.0,
+          "dataset": "tmy3"
+        },
+        {
+          "lat": 47.45,
+          "lon": -122.31,
+          "system_capacity_kw": 16.28,
+          "azimuth": 180.0,
+          "tilt": 10.0,
+          "array_type": 1,
+          "module_type": 0,
+          "losses_pct": 14.0,
+          "dataset": "tmy3"
+        }
+      ],
+      "responses": [
+        {
+          "ac_annual_kwh": 3857.138329688184,
+          "ac_monthly_kwh": [
+            80.32834995411072,
+            137.8751847953228,
+            269.5587373248231,
+            420.7863377295874,
+            559.7803605588582,
+            589.4786887379204,
+            622.773171159612,
+            492.3232271543346,
+            331.3561416917588,
+            197.1953306890416,
+            92.0617448302132,
+            63.62105506259785
+          ]
+        },
+        {
+          "ac_annual_kwh": 17088.01306597974,
+          "ac_monthly_kwh": [
+            494.284687266254,
+            791.9482283620922,
+            1275.490332544623,
+            1808.239295275162,
+            2249.78295747005,
+            2314.352083134697,
+            2489.560949502802,
+            2073.475513869481,
+            1546.841807827169,
+            1063.893853606299,
+            529.897524097823,
+            450.2458330232836
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "artifacts/engine.dc_production/annual_ac_kwh": {
+      "kind": "scalar",
+      "value": 20945.151395667923,
+      "tol_pct": 5.0
+    }
+  }
+}
