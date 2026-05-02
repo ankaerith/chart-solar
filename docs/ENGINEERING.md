@@ -133,6 +133,16 @@ frontend/
 - Every long job: enqueued, status pollable, dead-letter after N retries.
 - Every secret: in env, never in code; rotation cadence per `chart-solar-7wxq`.
 
+## Stacked PRs
+
+When you open a child PR with `gh pr create --base <feature-branch>` so GitHub diffs only the new changes against the parent, the child does **not** auto-retarget when the parent merges. As soon as the parent lands on `main`, retarget the child *before* merging it:
+
+```bash
+gh pr edit <child-pr> --base main
+```
+
+Skip this and GitHub will happily merge the child into the now-orphaned parent branch — the PR shows MERGED but the content never lands on `main`, and recovery means cherry-picking onto `main` in a new PR (see `chart-solar-ccbc` for the foot-gun that triggered this note).
+
 ## Database migrations
 
 Alembic owns the schema. The migrations directory is at the repo root: `alembic/versions/`. The `alembic` config (`alembic.ini`) and env (`alembic/env.py`) are wired to `backend.config.settings.database_url` so a single `DATABASE_URL` env var drives both the API and the migration runner.
