@@ -130,3 +130,13 @@ h1, h2, h3, h4, h5, h6, .display {
   font-weight: var(--display-weight);
   letter-spacing: var(--display-tracking);
 }
+
+/* Modal animation — used by components/ui/modal.tsx. */
+@keyframes sd-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes sd-pop-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
