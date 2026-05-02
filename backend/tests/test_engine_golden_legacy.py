@@ -14,11 +14,11 @@ cross-check — the legacy NPV was computed by an unrelated codebase,
 and any drift in our discounting math would surface here.
 
 End-to-end pipeline reproduction (running our engine on the same input
-parameters and matching the cashflow ledger within 1 %) is tracked
-separately in `chart-solar-azou` — the legacy stack used PVWatts for
-production, two parallel loans, and a marginal-tax-rate input the
-engine doesn't yet ingest, so a clean "feed inputs, match outputs"
-comparison needs more scaffolding than this golden.
+parameters and matching the cashflow ledger within 1 %) is intentionally
+out of scope here — the legacy stack used PVWatts for production, two
+parallel loans, and a marginal-tax-rate input the engine doesn't yet
+ingest, so a clean "feed inputs, match outputs" comparison needs more
+scaffolding. See `backend/tests/fixtures/README.md`.
 """
 
 from __future__ import annotations
