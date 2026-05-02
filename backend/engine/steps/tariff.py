@@ -30,6 +30,7 @@ from backend.domain.tariff import (
     CurrencyCode,
     TariffSchedule,
     TieredBlock,
+    TouPeriod,
     first_matching_tou_period,
 )
 from backend.domain.tmy import HOURS_PER_TMY, tmy_hour_calendar
@@ -131,6 +132,33 @@ def _bill_tiered(
     return monthly_energy, monthly_kwh
 
 
+def build_tou_rate_cache(periods: list[TouPeriod]) -> dict[tuple[int, bool, int], float]:
+    """Memoise ``(month, is_weekday, hour_of_day) → rate_per_kwh`` once.
+
+    There are only 12 × 2 × 24 = 576 distinct cells across an 8760-hour
+    year, so a one-shot scan over the unique cells is many orders of
+    magnitude cheaper than re-scanning ``periods`` 8760 × N times for
+    every Monte Carlo path × finance scenario.
+
+    Cells with no matching period are absent from the dict — callers
+    raise on miss to surface incomplete tariffs as a clear error rather
+    than silently zeroing out billing.
+    """
+    cache: dict[tuple[int, bool, int], float] = {}
+    for month in range(1, 13):
+        for is_weekday in (True, False):
+            for hour_of_day in range(24):
+                period = first_matching_tou_period(
+                    periods,
+                    month=month,
+                    is_weekday=is_weekday,
+                    hour_of_day=hour_of_day,
+                )
+                if period is not None:
+                    cache[(month, is_weekday, hour_of_day)] = period.rate_per_kwh
+    return cache
+
+
 def _bill_tou(
     *,
     hourly_import_kwh: list[float],
@@ -141,25 +169,22 @@ def _bill_tou(
     if not periods:
         raise ValueError("tou tariff requires tou_periods")
 
+    rate_cache = build_tou_rate_cache(periods)
     monthly_energy = [0.0] * 12
     monthly_kwh = [0.0] * 12
     for hour_index, kwh in enumerate(hourly_import_kwh):
         if kwh <= 0:
             continue
-        month, is_weekday, hour_of_day = _TMY_CALENDAR[hour_index]
-        period = first_matching_tou_period(
-            periods,
-            month=month,
-            is_weekday=is_weekday,
-            hour_of_day=hour_of_day,
-        )
-        if period is None:
+        cell = _TMY_CALENDAR[hour_index]
+        rate = rate_cache.get(cell)
+        if rate is None:
+            month, is_weekday, hour_of_day = cell
             raise ValueError(
                 f"no TOU period matches hour_index={hour_index} "
                 f"(month={month}, is_weekday={is_weekday}, hour={hour_of_day})"
             )
-        monthly_kwh[month - 1] += kwh
-        monthly_energy[month - 1] += kwh * period.rate_per_kwh
+        monthly_kwh[cell[0] - 1] += kwh
+        monthly_energy[cell[0] - 1] += kwh * rate
     return monthly_energy, monthly_kwh
 
 

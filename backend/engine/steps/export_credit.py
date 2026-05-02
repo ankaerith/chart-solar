@@ -41,7 +41,7 @@ from backend.engine.inputs import (
     SegTouConfig,
 )
 from backend.engine.registry import register
-from backend.engine.steps.tariff import sort_tiered_blocks, walk_tier_charge
+from backend.engine.steps.tariff import build_tou_rate_cache, sort_tiered_blocks, walk_tier_charge
 from backend.engine.types import ExportRegime
 
 _TMY_CALENDAR = tmy_hour_calendar()
@@ -275,21 +275,43 @@ def apply_nem_one_for_one(
             tariff=tariff,
         )
 
+    # Hoist the per-cell rate lookup outside the 8760-iteration loop —
+    # for TOU tariffs this collapses 8760 × len(periods) scans down to
+    # one 576-cell build.
+    rate_cache: dict[tuple[int, bool, int], float] | None
+    if tariff.structure == "tou":
+        if not tariff.tou_periods:
+            raise ValueError("tou tariff requires tou_periods")
+        rate_cache = build_tou_rate_cache(tariff.tou_periods)
+    else:
+        rate_cache = None
+
     monthly = [0.0] * 12
     total_kwh = 0.0
     for hour_index, export_kwh in enumerate(hourly_export_kwh):
         kwh = max(0.0, export_kwh)
         if kwh == 0.0:
             continue
-        month, is_weekday, hour_of_day = _TMY_CALENDAR[hour_index]
-        rate = _resolve_nem_one_rate_flat_or_tou(
-            tariff=tariff,
-            month=month,
-            is_weekday=is_weekday,
-            hour_of_day=hour_of_day,
-            hour_index=hour_index,
-        )
-        monthly[month - 1] += kwh * rate
+        cell = _TMY_CALENDAR[hour_index]
+        if rate_cache is not None:
+            rate = rate_cache.get(cell)
+            if rate is None:
+                month, is_weekday, hour_of_day = cell
+                raise ValueError(
+                    f"NEM 1:1 needs a TOU rate at hour_index={hour_index} "
+                    f"(month={month}, weekday={is_weekday}, hour={hour_of_day}) "
+                    "but no period matched — check tariff coverage"
+                )
+        else:
+            month, is_weekday, hour_of_day = cell
+            rate = _resolve_nem_one_rate_flat_or_tou(
+                tariff=tariff,
+                month=month,
+                is_weekday=is_weekday,
+                hour_of_day=hour_of_day,
+                hour_index=hour_index,
+            )
+        monthly[cell[0] - 1] += kwh * rate
         total_kwh += kwh
     return ExportCreditResult(
         regime="nem_one_for_one",

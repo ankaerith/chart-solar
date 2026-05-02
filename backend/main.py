@@ -8,6 +8,7 @@ from backend.api import audits, entitlements, forecast, health, irradiance, me, 
 from backend.api.auth.magic_link import router as auth_router
 from backend.api.auth.session_middleware import SessionMiddleware
 from backend.config import settings
+from backend.infra.http import aclose_all_clients
 from backend.infra.logging import configure_logging
 from backend.infra.middleware import BodySizeLimitMiddleware, CorrelationIdMiddleware
 from backend.services.entitlements_subscribers import register_subscribers
@@ -28,7 +29,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Register the entitlements grant/revoke handlers on the in-process
     # event bus. Idempotent — safe to re-enter on a hot reload.
     register_subscribers()
-    yield
+    try:
+        yield
+    finally:
+        # Drain the per-service AsyncClient cache so process exit
+        # doesn't leak open sockets / connection pools.
+        await aclose_all_clients()
 
 
 app = FastAPI(
