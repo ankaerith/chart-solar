@@ -140,7 +140,6 @@ async def revoke_by_event(
 _TIER_RANK_CASE = case(
     {member.value: TIER_RANK[member] for member in TIER_RANK},
     value=UserEntitlement.tier,
-    else_=-1,
 )
 
 
@@ -148,9 +147,9 @@ async def tier_for_user(session: AsyncSession, user_id: str) -> Tier:
     """Effective tier for ``user_id`` — highest active grant, or FREE.
 
     Returns ``Tier.FREE`` for a user with no rows or only-revoked rows.
-    Ranking happens in SQL; the ``else_=-1`` clause sorts unrecognised
-    tier strings (e.g. a column value renamed since this row was
-    written) below every known tier so a stale row can't win.
+    The ``ck_user_entitlements_tier`` CHECK constraint guarantees the
+    column value is a known ``Tier`` member, so the read coerces
+    directly without a defensive parse.
     """
     raw = await session.scalar(
         select(UserEntitlement.tier)
@@ -163,11 +162,7 @@ async def tier_for_user(session: AsyncSession, user_id: str) -> Tier:
     )
     if raw is None:
         return Tier.FREE
-    try:
-        return Tier(raw)
-    except ValueError:
-        _log.warning("entitlements.unknown_tier_in_row", user_id=user_id, raw=raw)
-        return Tier.FREE
+    return Tier(raw)
 
 
 __all__ = ["grant_tier", "revoke_by_event", "tier_for_user"]
