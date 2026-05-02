@@ -145,6 +145,7 @@ class InstallerQuote(Base):
         UUID(as_uuid=True),
         ForeignKey("audits.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     installer_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
