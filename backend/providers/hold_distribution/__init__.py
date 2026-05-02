@@ -24,18 +24,13 @@ from pydantic import BaseModel, Field
 from backend.engine.finance.sale import HoldYearProbability
 
 #: ACS 2022 median owner-occupied tenure (rounded). Source: U.S. Census
-#: Bureau, "Length of time householders have lived in unit" — drives
-#: the central tendency of the discrete-Gaussian default below.
+#: Bureau, "Length of time householders have lived in unit".
 DEFAULT_MEDIAN_HOLD_YEARS = 13
 
-#: Spread on the Gaussian. σ = 5 puts ~68 % of mass between years 8
-#: and 18 — wide enough that the long tail (year 25+) carries non-zero
-#: weight in the NPV roll-up.
+#: σ = 5 puts ~68 % of mass between years 8 and 18.
 DEFAULT_HOLD_SIGMA_YEARS = 5.0
 
-#: Inclusive upper bound on candidate sale years. ``HoldYearProbability``
-#: rejects ``year > 40``, and most engine horizons stop at 30; capping
-#: at 30 keeps the distribution coherent with both.
+#: ``HoldYearProbability`` rejects year > 40; most engine horizons stop at 30.
 DEFAULT_HORIZON_YEARS = 30
 
 

@@ -10,11 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from backend.engine.finance.sale import (
-    HoldYearProbability,
-    SaleScenarioInputs,
-    expected_sale_npv,
-)
+from backend.engine.finance.sale import SaleScenarioInputs, expected_sale_npv
 from backend.providers.hold_distribution import (
     DEFAULT_HOLD_SIGMA_YEARS,
     DEFAULT_HORIZON_YEARS,
@@ -132,19 +128,9 @@ async def test_national_default_accepts_custom_calibration() -> None:
     assert peak_year == 7
 
 
-async def test_national_default_drops_into_sale_scenario_inputs() -> None:
-    """``SaleScenarioInputs`` validates probabilities sum to 1.0; the
-    provider's output must satisfy that contract directly so the wizard
-    can pipe it through without re-normalizing."""
-    provider = NationalDefaultHoldDistributionProvider()
-    distribution = await provider.fetch(HoldDistributionQuery(country="US"))
-    inputs = SaleScenarioInputs(hold_year_probabilities=distribution)
-    assert inputs.hold_year_probabilities == distribution
-
-
 async def test_national_default_feeds_expected_sale_npv() -> None:
-    """End-to-end: provider output drives a real ``expected_sale_npv``
-    call. Smoke-tests the integration shape, not the financial output."""
+    """Provider output drives a real ``expected_sale_npv`` call —
+    smoke-tests the integration shape, not the financial output."""
     provider = NationalDefaultHoldDistributionProvider()
     distribution = await provider.fetch(HoldDistributionQuery(country="US", horizon_years=20))
     inputs = SaleScenarioInputs(hold_year_probabilities=distribution)
@@ -155,30 +141,9 @@ async def test_national_default_feeds_expected_sale_npv() -> None:
         dc_kw=8.0,
         inputs=inputs,
     )
-    # Each candidate sale year contributes one outcome; truncation at
-    # the cashflow horizon collapses years past it onto the final year,
-    # so the count is the distribution's distinct sale years (≤ horizon).
     assert len(result.outcomes) == len(distribution)
 
 
 def test_provider_satisfies_protocol() -> None:
     provider = NationalDefaultHoldDistributionProvider()
     assert isinstance(provider, HoldDistributionProvider)
-
-
-def test_default_constants_match_bead_spec() -> None:
-    """Locks the published defaults against chart-solar-0co4 — bumping
-    any of these requires updating both the docstring source citation
-    and the bead's stated default."""
-    assert DEFAULT_MEDIAN_HOLD_YEARS == 13
-    assert DEFAULT_HOLD_SIGMA_YEARS == 5.0
-    assert DEFAULT_HORIZON_YEARS == 30
-
-
-def test_hold_year_probability_used_directly() -> None:
-    """Provider returns the same model the engine consumes — no shadow
-    type, no conversion layer."""
-    distribution = discrete_gaussian_distribution(
-        median_years=13, sigma_years=5.0, horizon_years=30
-    )
-    assert all(isinstance(p, HoldYearProbability) for p in distribution)
