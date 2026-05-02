@@ -61,7 +61,7 @@ class ForecastJobView:
     error: str | None = None
 
 
-def submit_forecast(job_id: str, payload: dict[str, Any]) -> None:
+async def submit_forecast(job_id: str, payload: dict[str, Any]) -> None:
     """Hand a forecast job off to the queue under the given ``job_id``.
 
     Trampoline to ``backend.workers.queue.enqueue_forecast`` — the
@@ -69,8 +69,12 @@ def submit_forecast(job_id: str, payload: dict[str, Any]) -> None:
     instead of reaching into the worker package. Any future change in
     queue technology (SQS, Cloud Tasks) lands inside ``workers/`` and
     this signature absorbs the difference.
+
+    Async because the underlying ``redis-py`` client is synchronous and
+    the worker queue offloads it via ``asyncio.to_thread``; awaiting here
+    keeps the behaviour consistent and lets the API route ``await`` directly.
     """
-    _enqueue_forecast(job_id, payload)
+    await _enqueue_forecast(job_id, payload)
 
 
 def get_forecast_job(job_id: str) -> ForecastJobView | None:

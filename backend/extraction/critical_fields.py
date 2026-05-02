@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel
+
 from backend.extraction.schemas import Extracted, ExtractedProposal
 
 CRITICAL_FIELDS: frozenset[str] = frozenset(
@@ -31,10 +33,7 @@ CRITICAL_FIELD_REVIEW_THRESHOLD: float = 0.75
 
 
 def critical_field_confidences(proposal: ExtractedProposal) -> dict[str, float]:
-    """Return `{dotted_path: confidence}` for every critical field.
-
-    Skips fields whose path doesn't resolve (defensive — schema drift
-    surfaces as a missing key instead of a confidence value of 0)."""
+    """Return `{dotted_path: confidence}` for every critical field."""
     out: dict[str, float] = {}
     for path in CRITICAL_FIELDS:
         extracted = _resolve(proposal, path)
@@ -62,3 +61,31 @@ def _resolve(model: Any, dotted_path: str) -> Any:
             return None
         cur = getattr(cur, part, None)
     return cur
+
+
+def _validate_paths_against_schema() -> None:
+    """Walk every CRITICAL_FIELDS path against ``ExtractedProposal``'s
+    declared fields at import time so a schema rename / restructure
+    fails the process boot rather than silently emptying
+    ``critical_field_confidences()`` at audit time.
+    """
+    for path in CRITICAL_FIELDS:
+        cls: type[BaseModel] = ExtractedProposal
+        for part in path.split("."):
+            field = cls.model_fields.get(part)
+            if field is None:
+                raise RuntimeError(
+                    f"CRITICAL_FIELDS path {path!r} drifted from ExtractedProposal: "
+                    f"no field named {part!r} on {cls.__name__}"
+                )
+            annotation = field.annotation
+            origin = getattr(annotation, "__origin__", annotation)
+            if isinstance(origin, type) and issubclass(origin, BaseModel):
+                cls = origin
+            else:
+                # Reached a leaf (typically Extracted[T]); the next part of
+                # the path, if any, is invalid.
+                break
+
+
+_validate_paths_against_schema()

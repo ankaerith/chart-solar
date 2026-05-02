@@ -102,6 +102,46 @@ def _async_db_uses_null_pool() -> Iterator[None]:
             pass
 
 
+@pytest.fixture(autouse=True)
+async def _reset_rate_limit_buckets() -> AsyncIterator[None]:
+    """Drop any residual ``rl:*`` Redis keys before each test.
+
+    The login route's per-IP and per-email throttles persist counters
+    in Redis with a 1-hour TTL. Without this reset, repeated full-suite
+    runs would drift toward the cap and start surfacing 429s on tests
+    that have nothing to do with rate limiting. Failing open on Redis
+    unavailability mirrors the rate-limiter's own contract — a sick
+    Redis must not block test execution.
+    """
+    try:
+        from backend.infra.rate_limit import get_rate_limit_redis
+
+        client = get_rate_limit_redis()
+        async for key in client.scan_iter(match="rl:*"):
+            await client.delete(key)
+    except Exception:  # noqa: BLE001 — Redis is a soft dep for tests
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
+async def _reset_shared_http_clients() -> AsyncIterator[None]:
+    """Drain the per-service ``httpx.AsyncClient`` cache before each test.
+
+    Production reuses one client per upstream service (NSRDB, PVGIS,
+    Vertex, …) for connection pooling. Tests that monkeypatch
+    ``httpx.AsyncClient`` to inject a ``MockTransport`` rely on each
+    test getting a freshly-built client; without this reset the second
+    test in the same service-key namespace would reuse the prior
+    test's transport and load wrong fixtures.
+    """
+    from backend.infra.http import aclose_all_clients
+
+    await aclose_all_clients()
+    yield
+    await aclose_all_clients()
+
+
 @pytest.fixture
 def example_inputs() -> ForecastInputs:
     return ForecastInputs(

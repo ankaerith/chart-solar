@@ -16,6 +16,9 @@ from backend.domain.calendar import HOURS_PER_MONTH_NON_LEAP as HOURS_PER_MONTH_
 from backend.domain.calendar import (
     aggregate_hourly_to_monthly_mean as aggregate_hourly_to_monthly_mean,
 )
+from backend.infra.logging import get_logger
+
+_log = get_logger(__name__)
 
 
 def aggregate_daily_to_monthly_sum(
@@ -26,11 +29,18 @@ def aggregate_daily_to_monthly_sum(
 
     Returns ``None`` when the daily payload is missing or empty —
     callers leave the corresponding ``TmyData`` field unset and the
-    engine no-ops.
+    engine no-ops. Length mismatches between ``dates`` and ``values``
+    are logged before the same ``None`` return so a malformed upstream
+    payload doesn't silently disable the snow/precip derate.
     """
     if not values or not dates:
         return None
     if len(dates) != len(values):
+        _log.warning(
+            "openmeteo.daily_length_mismatch",
+            dates_len=len(dates),
+            values_len=len(values),
+        )
         return None
     monthly = [0.0] * 12
     for date_str, value in zip(dates, values, strict=False):

@@ -78,7 +78,7 @@ async def submit_forecast_endpoint(
         )
         return response_body
 
-    submit_forecast(job_id, inputs.model_dump())
+    await submit_forecast(job_id, inputs.model_dump())
     log.info("forecast.enqueued", job_id=job_id, user_id=user_id)
     return response_body
 

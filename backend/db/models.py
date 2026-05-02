@@ -1,9 +1,9 @@
 """ORM tables backing the idempotency utility.
 
 `idempotency_keys` caches request → response for any mutating POST endpoint
-that opts in via the `@idempotent` decorator. `stripe_events` is the
-companion dedupe ledger for Stripe webhooks (which key on `event.id`
-rather than a client-supplied `Idempotency-Key`).
+that opts in via :func:`backend.infra.idempotency.claim_idempotency_slot`.
+`stripe_events` is the companion dedupe ledger for Stripe webhooks (which
+key on `event.id` rather than a client-supplied `Idempotency-Key`).
 """
 
 from __future__ import annotations

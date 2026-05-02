@@ -6,7 +6,8 @@ Three layers exercised:
 * Webhook endpoint (``POST /api/stripe/webhook``) — TestClient,
   signed payloads, dedupe via the ``stripe_events`` table.
 * Subscriber → ``user_entitlements`` ledger — async grant + revoke,
-  idempotent on replay, ``tier_for_user`` reads back the correct tier.
+  idempotent on replay, ``tier_for_user`` reads back the correct tier,
+  FK rejection on non-existent / unparseable user ids.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import hashlib
 import hmac
 import json
 import time
+import uuid
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
@@ -23,6 +25,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 import backend.database as _db
+from backend.db.auth_models import User
 from backend.domain.events import PaymentRefunded, PaymentSucceeded
 from backend.entitlements.features import Tier
 from backend.infra.eventbus import clear_subscribers, dispatch_async
@@ -66,9 +69,23 @@ async def db_session() -> AsyncIterator[Any]:
         pytest.skip("Postgres unavailable for integration tests")
     async with _db.SessionLocal() as session:
         yield session
+        # FK on user_entitlements.user_id ON DELETE CASCADE means we
+        # only need to drop users to clean both, but be explicit so a
+        # failing test leaves the DB obviously empty for the next.
         await session.execute(text("DELETE FROM user_entitlements"))
         await session.execute(text("DELETE FROM stripe_events"))
+        await session.execute(text("DELETE FROM users"))
         await session.commit()
+
+
+async def _make_user(session: Any, *, email: str | None = None) -> str:
+    """Insert a User row and return its id as a string (the form Stripe
+    metadata carries through the webhook router)."""
+    suffix = uuid.uuid4().hex[:8]
+    row = User(email=email or f"user-{suffix}@example.com")
+    session.add(row)
+    await session.commit()
+    return str(row.id)
 
 
 # ---------------------------------------------------------------------------
@@ -192,66 +209,98 @@ def test_route_malformed_event_returns_none() -> None:
 
 
 async def test_grant_tier_inserts_and_replay_is_no_op(db_session: Any) -> None:
+    user_id = await _make_user(db_session)
     inserted_first = await grant_tier(
         db_session,
-        user_id="user_a",
+        user_id=user_id,
         tier=Tier.DECISION_PACK,
         granted_by_event_id="evt_1",
     )
     inserted_second = await grant_tier(
         db_session,
-        user_id="user_a",
+        user_id=user_id,
         tier=Tier.DECISION_PACK,
         granted_by_event_id="evt_1",
     )
     assert inserted_first is True
     assert inserted_second is False
-    assert await tier_for_user(db_session, "user_a") == Tier.DECISION_PACK
+    assert await tier_for_user(db_session, user_id) == Tier.DECISION_PACK
 
 
 async def test_grant_tier_picks_highest_rank(db_session: Any) -> None:
+    user_id = await _make_user(db_session)
     await grant_tier(
         db_session,
-        user_id="user_b",
+        user_id=user_id,
         tier=Tier.DECISION_PACK,
         granted_by_event_id="evt_dp",
     )
     await grant_tier(
         db_session,
-        user_id="user_b",
+        user_id=user_id,
         tier=Tier.TRACK,
         granted_by_event_id="evt_tr",
     )
-    assert await tier_for_user(db_session, "user_b") == Tier.TRACK
+    assert await tier_for_user(db_session, user_id) == Tier.TRACK
+
+
+async def test_grant_tier_rejects_unparseable_user_id(db_session: Any) -> None:
+    """Stripe metadata cannot mint a tier for a string that is not a UUID."""
+    inserted = await grant_tier(
+        db_session,
+        user_id="not-a-uuid",
+        tier=Tier.DECISION_PACK,
+        granted_by_event_id="evt_invalid",
+    )
+    assert inserted is False
+    # And no user_entitlement row was written.
+    rows = (await db_session.execute(text("SELECT count(*) FROM user_entitlements"))).scalar_one()
+    assert rows == 0
+
+
+async def test_grant_tier_rejects_unknown_user(db_session: Any) -> None:
+    """A well-formed UUID that does not exist in users is rejected by the FK."""
+    fabricated = str(uuid.uuid4())
+    inserted = await grant_tier(
+        db_session,
+        user_id=fabricated,
+        tier=Tier.DECISION_PACK,
+        granted_by_event_id="evt_phantom",
+    )
+    assert inserted is False
+    rows = (await db_session.execute(text("SELECT count(*) FROM user_entitlements"))).scalar_one()
+    assert rows == 0
 
 
 async def test_revoke_marks_active_grant(db_session: Any) -> None:
+    user_id = await _make_user(db_session)
     await grant_tier(
         db_session,
-        user_id="user_c",
+        user_id=user_id,
         tier=Tier.DECISION_PACK,
         granted_by_event_id="evt_g",
     )
     revoked = await revoke_by_event(
         db_session,
-        user_id="user_c",
+        user_id=user_id,
         tier=Tier.DECISION_PACK,
         revoked_by_event_id="evt_r",
     )
     assert revoked is True
-    assert await tier_for_user(db_session, "user_c") == Tier.FREE
+    assert await tier_for_user(db_session, user_id) == Tier.FREE
 
 
 async def test_revoke_replay_is_no_op(db_session: Any) -> None:
+    user_id = await _make_user(db_session)
     await grant_tier(
         db_session,
-        user_id="user_d",
+        user_id=user_id,
         tier=Tier.DECISION_PACK,
         granted_by_event_id="evt_g2",
     )
     first = await revoke_by_event(
         db_session,
-        user_id="user_d",
+        user_id=user_id,
         tier=Tier.DECISION_PACK,
         revoked_by_event_id="evt_r2",
     )
@@ -259,24 +308,31 @@ async def test_revoke_replay_is_no_op(db_session: Any) -> None:
     # an unrelated grant.
     await grant_tier(
         db_session,
-        user_id="user_d",
+        user_id=user_id,
         tier=Tier.DECISION_PACK,
         granted_by_event_id="evt_g3",
     )
     second = await revoke_by_event(
         db_session,
-        user_id="user_d",
+        user_id=user_id,
         tier=Tier.DECISION_PACK,
         revoked_by_event_id="evt_r2",
     )
     assert first is True
     assert second is False
     # The newer grant remains untouched.
-    assert await tier_for_user(db_session, "user_d") == Tier.DECISION_PACK
+    assert await tier_for_user(db_session, user_id) == Tier.DECISION_PACK
+
+
+async def test_tier_for_user_anonymous_returns_free(db_session: Any) -> None:
+    """The string ``anonymous`` is the unauthenticated sentinel — it does
+    not parse as a UUID, so tier resolution short-circuits to FREE."""
+    assert await tier_for_user(db_session, "anonymous") == Tier.FREE
 
 
 async def test_tier_for_user_with_no_rows_returns_free(db_session: Any) -> None:
-    assert await tier_for_user(db_session, "no_such_user") == Tier.FREE
+    user_id = await _make_user(db_session)
+    assert await tier_for_user(db_session, user_id) == Tier.FREE
 
 
 # ---------------------------------------------------------------------------
@@ -285,34 +341,36 @@ async def test_tier_for_user_with_no_rows_returns_free(db_session: Any) -> None:
 
 
 async def test_subscriber_grants_tier_on_payment_succeeded(db_session: Any) -> None:
+    user_id = await _make_user(db_session)
     register_subscribers()
     await dispatch_async(
         PaymentSucceeded(
-            user_id="user_e",
+            user_id=user_id,
             tier=Tier.DECISION_PACK,
             stripe_event_id="evt_e1",
         )
     )
-    assert await tier_for_user(db_session, "user_e") == Tier.DECISION_PACK
+    assert await tier_for_user(db_session, user_id) == Tier.DECISION_PACK
 
 
 async def test_subscriber_revokes_tier_on_payment_refunded(db_session: Any) -> None:
+    user_id = await _make_user(db_session)
     register_subscribers()
     await dispatch_async(
         PaymentSucceeded(
-            user_id="user_f",
+            user_id=user_id,
             tier=Tier.DECISION_PACK,
             stripe_event_id="evt_f1",
         )
     )
     await dispatch_async(
         PaymentRefunded(
-            user_id="user_f",
+            user_id=user_id,
             tier=Tier.DECISION_PACK,
             stripe_event_id="evt_f2",
         )
     )
-    assert await tier_for_user(db_session, "user_f") == Tier.FREE
+    assert await tier_for_user(db_session, user_id) == Tier.FREE
 
 
 # ---------------------------------------------------------------------------
@@ -343,9 +401,10 @@ def test_webhook_rejects_invalid_signature() -> None:
     assert resp.status_code == 400
 
 
-def test_webhook_grants_tier_on_checkout_session_completed(db_session: Any) -> None:
+async def test_webhook_grants_tier_on_checkout_session_completed(db_session: Any) -> None:
+    user_id = await _make_user(db_session)
     register_subscribers()
-    payload = json.dumps(_checkout_event(event_id="evt_h1", user_id="user_h")).encode()
+    payload = json.dumps(_checkout_event(event_id="evt_h1", user_id=user_id)).encode()
     sig = _sign(payload)
     with TestClient(app) as client:
         resp = client.post(
@@ -358,19 +417,39 @@ def test_webhook_grants_tier_on_checkout_session_completed(db_session: Any) -> N
     assert body == {"status": "ok", "event_id": "evt_h1"}
 
     # The subscriber ran inside the request, so the entitlement is
-    # visible synchronously after the response.
-    async def _check() -> None:
-        async with _db.SessionLocal() as s:
-            assert await tier_for_user(s, "user_h") == Tier.DECISION_PACK
+    # visible synchronously after the response. Re-open the session
+    # because db_session was used above; SQLAlchemy AsyncSession
+    # caching means a fresh session reads the committed write.
+    async with _db.SessionLocal() as s:
+        assert await tier_for_user(s, user_id) == Tier.DECISION_PACK
 
-    import asyncio
 
-    asyncio.run(_check())
+async def test_webhook_rejects_grant_for_unknown_user(db_session: Any) -> None:
+    """A signed-but-bogus user_id must not grant a tier — the FK rejects
+    the insert, the subscriber returns False, the webhook still 200s."""
+    fabricated_user = str(uuid.uuid4())
+    register_subscribers()
+    payload = json.dumps(_checkout_event(event_id="evt_phantom", user_id=fabricated_user)).encode()
+    sig = _sign(payload)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/stripe/webhook",
+            content=payload,
+            headers={"Stripe-Signature": sig},
+        )
+    # Webhook returns ok (Stripe must not retry) but no entitlement was created.
+    assert resp.status_code == 200
+    async with _db.SessionLocal() as s:
+        assert await tier_for_user(s, fabricated_user) == Tier.FREE
 
 
 def test_webhook_replay_is_acknowledged_without_re_dispatch(db_session: Any) -> None:
     register_subscribers()
-    payload = json.dumps(_checkout_event(event_id="evt_i1", user_id="user_i")).encode()
+    # Use a plausible user_id here; even if it does not exist, the dedupe
+    # behaviour we are asserting (replay → "replay" status) is independent
+    # of grant success.
+    fabricated_user = str(uuid.uuid4())
+    payload = json.dumps(_checkout_event(event_id="evt_i1", user_id=fabricated_user)).encode()
     sig = _sign(payload)
     with TestClient(app) as client:
         first = client.post(

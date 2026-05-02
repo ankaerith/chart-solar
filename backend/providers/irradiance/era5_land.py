@@ -25,7 +25,6 @@ other provider.
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Awaitable
 from typing import Any, Protocol, runtime_checkable
 
@@ -33,6 +32,7 @@ from pydantic import BaseModel, Field
 
 from backend.domain.tmy import TmyData
 from backend.infra.http import make_get
+from backend.infra.logging import get_logger
 from backend.providers.irradiance._aggregation import (
     aggregate_daily_to_monthly_sum,
     representative_archive_year,
@@ -47,7 +47,7 @@ OPENMETEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 #: provider that calls the sibling.
 _SERVICE = "era5_land"
 
-_logger = logging.getLogger(__name__)
+_log = get_logger(__name__)
 
 
 class Era5LandAggregates(BaseModel):
@@ -147,14 +147,8 @@ async def fetch_aggregates_with_primary(
         raise
     try:
         agg = await sibling_task
-    except Exception:
-        _logger.warning(
-            "%s sibling fetch failed at (%.4f, %.4f); leaving precip + snow fields unset",
-            _SERVICE,
-            lat,
-            lon,
-            exc_info=True,
-        )
+    except Exception:  # noqa: BLE001 — sibling failure must not break the primary
+        _log.warning("era5_land.sibling_fetch_failed", lat=lat, lon=lon, exc_info=True)
         return tmy
     return tmy.model_copy(
         update={

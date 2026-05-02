@@ -56,7 +56,9 @@ def _stub_tmy_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(forecast_worker, "_fetch_tmy", _fake)
 
 
-def test_forecast_job_round_trips_through_real_queue(queue: Queue, _stub_tmy_fetch: None) -> None:
+async def test_forecast_job_round_trips_through_real_queue(
+    queue: Queue, _stub_tmy_fetch: None
+) -> None:
     inputs = ForecastInputs(
         system=SystemInputs(lat=47.6, lon=-122.3, dc_kw=8.0, tilt_deg=25, azimuth_deg=180),
         financial=FinancialInputs(),
@@ -64,7 +66,7 @@ def test_forecast_job_round_trips_through_real_queue(queue: Queue, _stub_tmy_fet
     )
     job_id = str(uuid4())
 
-    enqueue_forecast(job_id, inputs.model_dump())
+    await enqueue_forecast(job_id, inputs.model_dump())
 
     worker = SimpleWorker([queue], connection=get_redis())
     worker.work(burst=True, with_scheduler=False)
@@ -80,7 +82,7 @@ def test_forecast_job_round_trips_through_real_queue(queue: Queue, _stub_tmy_fet
     assert "engine.export_credit" not in artifacts
 
 
-def test_correlation_id_propagates_to_job_meta(queue: Queue) -> None:
+async def test_correlation_id_propagates_to_job_meta(queue: Queue) -> None:
     inputs = ForecastInputs(
         system=SystemInputs(lat=47.6, lon=-122.3, dc_kw=8.0, tilt_deg=25, azimuth_deg=180),
         financial=FinancialInputs(),
@@ -90,7 +92,7 @@ def test_correlation_id_propagates_to_job_meta(queue: Queue) -> None:
 
     set_correlation_id("test-corr-id-xyz")
     try:
-        enqueue_forecast(job_id, inputs.model_dump())
+        await enqueue_forecast(job_id, inputs.model_dump())
     finally:
         set_correlation_id(None)
 
