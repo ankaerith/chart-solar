@@ -189,7 +189,7 @@ def test_ground_mount_geometry_increases_loss_vs_rooftop() -> None:
         dc_kw=8.0,
         tilt_deg=25,
         azimuth_deg=180,
-    )  # snow_geometry omitted → rooftop defaults
+    )
     ground_mount_system = SystemInputs(
         lat=44.0,
         lon=-72.5,

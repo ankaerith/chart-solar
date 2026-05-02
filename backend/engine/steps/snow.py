@@ -103,21 +103,19 @@ def run_snow_loss(
         return None
 
     geom = system.snow_geometry
-    resolved_slant = (
-        slant_height_m
-        if slant_height_m is not None
-        else (geom.slant_height_m if geom is not None else DEFAULT_SLANT_HEIGHT_M)
+
+    def _resolve(override: float | None, attr: str, default: float) -> float:
+        if override is not None:
+            return override
+        if geom is not None:
+            return float(getattr(geom, attr))
+        return default
+
+    resolved_slant = _resolve(slant_height_m, "slant_height_m", DEFAULT_SLANT_HEIGHT_M)
+    resolved_lower_edge = _resolve(
+        lower_edge_height_m, "lower_edge_height_m", DEFAULT_LOWER_EDGE_HEIGHT_M
     )
-    resolved_lower_edge = (
-        lower_edge_height_m
-        if lower_edge_height_m is not None
-        else (geom.lower_edge_height_m if geom is not None else DEFAULT_LOWER_EDGE_HEIGHT_M)
-    )
-    resolved_string = (
-        string_factor
-        if string_factor is not None
-        else (geom.string_factor if geom is not None else 1.0)
-    )
+    resolved_string = _resolve(string_factor, "string_factor", 1.0)
 
     monthly_temp_c = aggregate_hourly_to_monthly_mean(tmy.temp_air_c)
     # Townsend's `poa_global` is monthly insolation (Wh/m²), an energy
