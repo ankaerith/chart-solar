@@ -162,13 +162,14 @@ async def make_audit(session: Any, *, owner: uuid.UUID) -> uuid.UUID:
     return audit.id
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def script() -> ScriptDirectory:
     """Alembic's view of the migration chain on disk.
 
-    Module-scoped because every test_alembic_*_round_trip.py file just
-    wants to read the chain — no per-test mutation. Pair with
-    ``backend.tests._alembic.assert_revision_in_chain``.
+    Session-scoped — every test_alembic_*_round_trip.py file just reads
+    the chain, no per-test mutation. Sharing one ``ScriptDirectory``
+    across the suite saves seven disk walks of ``alembic/versions/``.
+    Pair with ``backend.tests._alembic.assert_revision_in_chain``.
     """
     cfg = Config("alembic.ini")
     return ScriptDirectory.from_config(cfg)
