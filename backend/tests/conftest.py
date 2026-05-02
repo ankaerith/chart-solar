@@ -6,6 +6,8 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -158,3 +160,15 @@ async def make_audit(session: Any, *, owner: uuid.UUID) -> uuid.UUID:
     session.add(audit)
     await session.commit()
     return audit.id
+
+
+@pytest.fixture(scope="module")
+def script() -> ScriptDirectory:
+    """Alembic's view of the migration chain on disk.
+
+    Module-scoped because every test_alembic_*_round_trip.py file just
+    wants to read the chain — no per-test mutation. Pair with
+    ``backend.tests._alembic.assert_revision_in_chain``.
+    """
+    cfg = Config("alembic.ini")
+    return ScriptDirectory.from_config(cfg)
