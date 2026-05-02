@@ -108,8 +108,10 @@ def test_parse_nsrdb_csv_aggregates_hourly_rh_into_monthly_mean() -> None:
 
 
 def test_parse_nsrdb_csv_leaves_precip_and_snow_unset_for_psm3() -> None:
-    """PSM3 doesn't carry surface precipitation or snowfall — those
-    fields stay ``None`` until the NSRDB-1985 monthly adapter lands."""
+    """PSM3 doesn't carry surface precipitation or snowfall — the
+    parser leaves those fields ``None``. The NSRDB-1985 sibling
+    (chart-solar-qrhs) populates them after the parse step; the
+    integration is covered in ``test_nsrdb_1985_sibling``."""
     csv_text = _synthetic_nsrdb_csv(
         hours=HOURS_PER_TMY,
         elevation=1655.0,
