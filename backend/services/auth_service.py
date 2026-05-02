@@ -2,11 +2,13 @@
 
 Password-less by design. Flow:
 
-1. **Request** (``request_magic_link``): caller submits an email; we
-   generate a random opaque token, store its sha256 hash with a
-   15-minute expiry, and email the raw token (embedded in a callback
-   URL) to the address. We don't reveal whether the email is already a
-   user — the response is the same either way to prevent enumeration.
+1. **Request** (``issue_magic_link`` + ``send_magic_link_email``):
+   ``issue_magic_link`` persists the hashed token row and returns a
+   :class:`PendingMagicLinkEmail` describing the message to send.
+   The caller closes its DB session before invoking
+   ``send_magic_link_email`` so a slow Resend round-trip never parks
+   a Postgres connection. ``request_magic_link`` is a thin sync
+   helper for tests that want the combined flow in one call.
 
 2. **Consume** (``consume_magic_link``): caller posts the raw token
    back. We look up its hash; refuse if expired or already consumed;
@@ -24,12 +26,19 @@ Password-less by design. Flow:
 Tokens never appear in DB rows in raw form; both ``MagicLink.token_hash``
 and ``Session.token_hash`` are sha256 of the raw token. A leaked DB
 therefore can't be turned into forged auth links or stolen sessions.
+
+Email addresses never appear in structured logs — the architecture
+intent is that the ``users`` table never joins to PII, so emitting
+emails to log sinks (Sentry, downstream aggregators) would widen the
+PII blast radius. Auth events log either ``user_id`` or a token-hash
+prefix instead.
 """
 
 from __future__ import annotations
 
 import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from urllib.parse import urlencode, urlparse, urlunparse
 
@@ -57,20 +66,38 @@ def _normalise_email(value: str) -> str:
     return value.strip().lower()
 
 
-async def request_magic_link(
+@dataclass(frozen=True, slots=True)
+class PendingMagicLinkEmail:
+    """The email payload ``issue_magic_link`` returns for the caller to dispatch.
+
+    The caller MUST send this *outside* the DB session block —
+    ``issue_magic_link`` has already committed its row, and parking a
+    Postgres connection on the Resend round-trip is the connection-pool
+    starvation pattern this split exists to avoid.
+    """
+
+    to: str
+    subject: str
+    html_body: str
+    text_body: str
+
+
+async def issue_magic_link(
     session: AsyncSession,
-    email_provider: EmailProvider,
     *,
     email: str,
     callback_url: str | None = None,
     now: datetime | None = None,
-) -> None:
-    """Generate a magic link, persist its hash, email the user.
+) -> PendingMagicLinkEmail:
+    """Persist the magic-link row and return the data needed to email it.
+
+    Splits the DB write from the email send so the route closes its
+    session before invoking the provider — the Resend call (typically
+    100–300 ms) must not hold a Postgres connection.
 
     The response from the API caller's perspective is the same whether
-    or not the email is a known user (enumeration-resistant). The user
-    learns nothing about the system's user-table contents from a
-    sign-in attempt.
+    or not the email is a known user (enumeration-resistant); we only
+    learn that here at consume time.
     """
     issued_at = now or utc_now()
     raw_token = secrets.token_urlsafe(_TOKEN_BYTES)
@@ -83,17 +110,48 @@ async def request_magic_link(
     )
     session.add(link)
     await session.commit()
+    _log.info("auth.magic_link_issued", token_hash_prefix=link.token_hash[:12])
 
     callback = _build_callback_url(callback_url or settings.auth_callback_url, raw_token)
     html, text = _magic_link_email_bodies(callback=callback)
 
-    await email_provider.send(
+    return PendingMagicLinkEmail(
         to=target_email,
         subject="Your Chart Solar sign-in link",
         html_body=html,
         text_body=text,
     )
-    _log.info("auth.magic_link_issued", email=target_email)
+
+
+async def send_magic_link_email(
+    email_provider: EmailProvider, pending: PendingMagicLinkEmail
+) -> None:
+    """Dispatch the prepared magic-link email outside the DB session block."""
+    await email_provider.send(
+        to=pending.to,
+        subject=pending.subject,
+        html_body=pending.html_body,
+        text_body=pending.text_body,
+    )
+
+
+async def request_magic_link(
+    session: AsyncSession,
+    email_provider: EmailProvider,
+    *,
+    email: str,
+    callback_url: str | None = None,
+    now: datetime | None = None,
+) -> None:
+    """Combined helper for tests: persist + email in one call.
+
+    Production routes should call ``issue_magic_link`` then close the
+    session before invoking ``send_magic_link_email`` so a slow email
+    provider can't park a Postgres connection. This wrapper keeps the
+    in-process pattern simple for service-layer tests.
+    """
+    pending = await issue_magic_link(session, email=email, callback_url=callback_url, now=now)
+    await send_magic_link_email(email_provider, pending)
 
 
 async def consume_magic_link(
@@ -143,7 +201,7 @@ async def consume_magic_link(
     )
     session.add(session_row)
     await session.commit()
-    _log.info("auth.session_created", user_id=str(user_row.id), email=user_row.email)
+    _log.info("auth.session_created", user_id=str(user_row.id))
     return user_row, raw_session_token
 
 
@@ -234,8 +292,11 @@ def _magic_link_email_bodies(*, callback: str) -> tuple[str, str]:
 
 __all__ = [
     "MagicLinkError",
+    "PendingMagicLinkEmail",
     "consume_magic_link",
+    "issue_magic_link",
     "request_magic_link",
     "revoke_session",
+    "send_magic_link_email",
     "user_id_for_session_token",
 ]

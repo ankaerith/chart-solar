@@ -30,8 +30,9 @@ from backend.providers.email.resend import ResendEmailProvider
 from backend.services.auth_service import (
     MagicLinkError,
     consume_magic_link,
-    request_magic_link,
+    issue_magic_link,
     revoke_session,
+    send_magic_link_email,
 )
 
 router = APIRouter()
@@ -49,14 +50,15 @@ async def login(payload: LoginRequest) -> dict[str, str]:
     Always 200 — the response shape doesn't change whether the email
     matches a known user. Operator probing for "is bob@example.com a
     user" gets the same answer either way.
+
+    The DB write and the Resend send are split: we close the session
+    before invoking the email provider so a slow Resend round-trip
+    cannot park a Postgres connection.
     """
     email_provider = ResendEmailProvider()
     async with _db.SessionLocal() as session:
-        await request_magic_link(
-            session,
-            email_provider,
-            email=str(payload.email),
-        )
+        pending = await issue_magic_link(session, email=str(payload.email))
+    await send_magic_link_email(email_provider, pending)
     return {"status": "magic_link_sent"}
 
 
