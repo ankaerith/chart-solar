@@ -21,6 +21,8 @@ floor (zero-snow assumption) until the data layer is universal.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 import pvlib.snow
 from pydantic import BaseModel, Field
@@ -31,7 +33,7 @@ from backend.domain.calendar import (
     apply_monthly_factors,
 )
 from backend.domain.tmy import HOURS_PER_TMY, TmyData
-from backend.engine.inputs import SystemInputs
+from backend.engine.inputs import SnowGeometry, SystemInputs
 from backend.engine.registry import register
 from backend.engine.steps.dc_production import DcProductionResult
 
@@ -104,18 +106,22 @@ def run_snow_loss(
 
     geom = system.snow_geometry
 
-    def _resolve(override: float | None, attr: str, default: float) -> float:
+    def _resolve(
+        override: float | None,
+        accessor: Callable[[SnowGeometry], float],
+        default: float,
+    ) -> float:
         if override is not None:
             return override
         if geom is not None:
-            return float(getattr(geom, attr))
+            return accessor(geom)
         return default
 
-    resolved_slant = _resolve(slant_height_m, "slant_height_m", DEFAULT_SLANT_HEIGHT_M)
+    resolved_slant = _resolve(slant_height_m, lambda g: g.slant_height_m, DEFAULT_SLANT_HEIGHT_M)
     resolved_lower_edge = _resolve(
-        lower_edge_height_m, "lower_edge_height_m", DEFAULT_LOWER_EDGE_HEIGHT_M
+        lower_edge_height_m, lambda g: g.lower_edge_height_m, DEFAULT_LOWER_EDGE_HEIGHT_M
     )
-    resolved_string = _resolve(string_factor, "string_factor", 1.0)
+    resolved_string = _resolve(string_factor, lambda g: g.string_factor, 1.0)
 
     monthly_temp_c = aggregate_hourly_to_monthly_mean(tmy.temp_air_c)
     # Townsend's `poa_global` is monthly insolation (Wh/m²), an energy
