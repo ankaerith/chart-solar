@@ -18,17 +18,28 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import CheckConstraint, DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db.base import Base
+from backend.entitlements.features import Tier
+
+_ALLOWED_TIER_VALUES = tuple(member.value for member in Tier)
 
 
 class UserEntitlement(Base):
     """One grant of a tier to a user, sourced from a single Stripe event."""
 
     __tablename__ = "user_entitlements"
+    __table_args__ = (
+        CheckConstraint(
+            "tier IN ({values})".format(
+                values=", ".join(f"'{value}'" for value in _ALLOWED_TIER_VALUES)
+            ),
+            name="ck_user_entitlements_tier",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
