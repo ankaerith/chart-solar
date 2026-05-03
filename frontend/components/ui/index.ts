@@ -10,6 +10,7 @@ export { MonoLabel } from "./mono-label";
 export { Panel } from "./panel";
 export { SegBtn } from "./seg-btn";
 export type { SegOption } from "./seg-btn";
+export { Slider } from "./slider";
 export { TextInput } from "./text-input";
 export type { TextInputProps } from "./text-input";
 export { Wordmark } from "./wordmark";

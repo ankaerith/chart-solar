@@ -40,17 +40,9 @@ const DISCOUNT_OPTIONS = [
   { value: "custom" as const, label: "Custom" },
 ];
 
-// Step 5 — Financing. The CTA changes from "Continue" to "See my
-// forecast" — this step submits the wizard. Method-specific reveals
-// keep the form short while still surfacing the levers that move the
-// math (loan: term + APR + dealer fee; lease: escalator).
-//
-// Discount-rate is the opportunity-cost knob — calling it out here
-// (and not on a later screen) is deliberate: HYSA / mortgage / S&P are
-// the comparators most homeowners pick from.
-//
-// Visual contract: design/solar-decisions/project/screen-wizard.jsx
-// :StepFinance (lines 377–455).
+// design ref · screen-wizard.jsx:StepFinance (377–455)
+// Discount-rate is on this step on purpose — HYSA / mortgage / S&P
+// comparators belong next to the upfront, not on a later screen.
 
 export function StepFinance({
   data,
@@ -65,14 +57,7 @@ export function StepFinance({
   onNext: () => void;
   isSubmitting?: boolean;
 }) {
-  const upfront =
-    data.method === "cash"
-      ? 28400
-      : data.method === "loan"
-        ? 0
-        : data.method === "lease"
-          ? 0
-          : 0;
+  const upfront = data.method === "cash" ? 28400 : 0;
 
   return (
     <StepShell

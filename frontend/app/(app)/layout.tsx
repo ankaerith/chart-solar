@@ -1,11 +1,8 @@
 import type { ReactNode } from "react";
 import { SunBackdrop } from "@/components/layout";
 
-// (app) — product flows: /forecast, /audit, /library, /results.
-// Distinct from (marketing) in that the chrome is custom per-flow
-// (the wizard has its own slim nav; the audit pipeline gets a
-// progress bar). The shared element is the ambient SunBackdrop and
-// the skip-to-content anchor.
+// Product-flow layout: each child renders its own chrome (wizard nav,
+// audit progress bar). Marketing's NavBar is intentionally absent.
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (

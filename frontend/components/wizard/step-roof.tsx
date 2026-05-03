@@ -1,6 +1,6 @@
 "use client";
 
-import { Field, MonoLabel, Panel, SegBtn } from "@/components/ui";
+import { Field, MonoLabel, Panel, SegBtn, Slider } from "@/components/ui";
 import { DetectRow } from "./detect-row";
 import { StepGrid, StepShell } from "./step-shell";
 import type { RoofStep, UsageStep } from "./wizard-state";
@@ -27,16 +27,9 @@ const SHADING_OPTIONS = [
   { value: "heavy" as const, label: "Heavy", sub: "<70%" },
 ];
 
-// Step 3 — Roof. System size is a slider with a big mono numeric
-// readout; tilt / azimuth / shading are SegBtns. Right Panel reflects
-// modeled annual kWh and % of usage covered, recomputed live.
-//
-// The 1450 kWh/kW yield + 92% solar access numbers are illustrative
-// stand-ins for the engine output (pvlib will override these once
-// chart-solar-bqq lands).
-//
-// Visual contract: design/solar-decisions/project/screen-wizard.jsx
-// :StepRoof (lines 237–296).
+// design ref · screen-wizard.jsx:StepRoof (237–296)
+// 1450 kWh/kW and 92% solar-access are illustrative — pvlib output
+// replaces these once chart-solar-bqq lands.
 
 export function StepRoof({
   data,
@@ -66,24 +59,16 @@ export function StepRoof({
       <StepGrid>
         <div className="flex flex-col gap-[22px]">
           <Field label="System size" hint="DC kW">
-            <div className="flex items-center gap-4">
-              <input
-                type="range"
-                min="3"
-                max="14"
-                step="0.1"
-                value={data.size}
-                onChange={(e) =>
-                  setData({ size: parseFloat(e.target.value) })
-                }
-                aria-label="System size in kilowatts DC"
-                className="flex-1 accent-accent"
-              />
-              <div className="min-w-[110px] text-right font-display text-[32px] tabular-nums">
-                {data.size.toFixed(1)}{" "}
-                <span className="font-mono text-[15px] text-ink-dim">kW</span>
-              </div>
-            </div>
+            <Slider
+              min={3}
+              max={14}
+              step={0.1}
+              value={data.size}
+              onChange={(v) => setData({ size: v })}
+              display={data.size.toFixed(1)}
+              unit="kW"
+              ariaLabel="System size in kilowatts DC"
+            />
           </Field>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Tilt" hint="degrees">

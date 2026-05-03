@@ -5,10 +5,7 @@ import { Arrow } from "@/components/icons";
 import { Btn, Eyebrow } from "@/components/ui";
 import { STEPS } from "./wizard-state";
 
-// Shared frame for every wizard step: kicker eyebrow, large display
-// title, optional sub, content slot, and a back/continue (or skip)
-// row at the bottom. Mirrors solar-decisions/project/screen-wizard.jsx
-// :StepShell (lines 44–71).
+// design ref · screen-wizard.jsx:StepShell (44–71)
 
 export function StepShell({
   index,

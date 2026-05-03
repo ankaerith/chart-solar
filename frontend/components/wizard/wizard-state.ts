@@ -1,10 +1,5 @@
-// Wizard state shape — mirrors design/solar-decisions/project/app.jsx
-// (lines 49–55) and feeds the mock forecast endpoint at
-// `/api/forecast`. Once the OpenAPI generator (chart-solar-ajgz) starts
-// emitting the real ForecastInputs from backend Pydantic, this file
-// becomes a thin adapter that maps the wizard's UI shape onto the
-// generated type. Keep field names aligned with the engine's expected
-// keys to make that swap mechanical.
+// Field names mirror the eventual Pydantic ForecastInputs
+// (chart-solar-ajgz) so the OpenAPI-generated swap is mechanical.
 
 export const STEP_KEYS = [
   "address",

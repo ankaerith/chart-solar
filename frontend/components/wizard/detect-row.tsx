@@ -1,9 +1,6 @@
 import type { ReactNode } from "react";
 
-// DetectRow — label/value pair used inside the right-hand preview Panel
-// on every wizard step. Dashed underline rule between rows; mono-set
-// values to keep numerics aligned. Mirrors
-// design/solar-decisions/project/screen-wizard.jsx:DetectRow (122–132).
+// design ref · screen-wizard.jsx:DetectRow (122–132)
 
 export function DetectRow({
   label,

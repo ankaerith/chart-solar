@@ -2,12 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-// Multi-select chip group — used for "Major loads coming" (Step 2) and
-// "Critical loads" (Step 4). Editorial chips with a strong dark fill
-// when active; matches design/solar-decisions/project/screen-wizard.jsx
-// :StepUsage (197–214) + :StepBattery (333–349). The chosen set is a
-// frozen `ReadonlyArray` so it threads through the wizard state without
-// accidental mutation.
+// design ref · screen-wizard.jsx:StepUsage (197–214) + StepBattery (333–349)
 
 export function ChipGroup({
   options,

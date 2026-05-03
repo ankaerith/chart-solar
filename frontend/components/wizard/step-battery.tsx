@@ -5,7 +5,7 @@ import {
   BatteryDispatch,
   demoBatteryDispatch,
 } from "@/components/charts";
-import { Field, MonoLabel, Panel, SegBtn } from "@/components/ui";
+import { Field, MonoLabel, Panel, SegBtn, Slider } from "@/components/ui";
 import { Currency } from "@/lib/intl";
 import { ChipGroup } from "./chip-group";
 import { DetectRow } from "./detect-row";
@@ -23,14 +23,7 @@ const DISPATCH_OPTIONS = [
   { value: "backup" as const, label: "Backup-first", sub: "reserve 80%" },
 ];
 
-// Step 4 — Battery. Skip-with-defaults supported (the StepShell skip
-// link routes straight to Financing with `include=false`). When a
-// battery is included, capacity slider + dispatch SegBtn + critical-
-// loads chips reveal, and the right Panel renders the demo dispatch
-// chart.
-//
-// Visual contract: design/solar-decisions/project/screen-wizard.jsx
-// :StepBattery (lines 298–375).
+// design ref · screen-wizard.jsx:StepBattery (298–375)
 
 export function StepBattery({
   data,
@@ -45,9 +38,7 @@ export function StepBattery({
   onNext: () => void;
   onSkip: () => void;
 }) {
-  // demoBatteryDispatch() is a deterministic seed so memoising once
-  // keeps the chart stable across rerenders without recomputing the
-  // 24-hour profile on every keystroke elsewhere in the wizard.
+  // memoised so wizard-state edits elsewhere don't recompute the 24h profile
   const dispatchSample = useMemo(() => demoBatteryDispatch(), []);
   return (
     <StepShell
@@ -70,26 +61,17 @@ export function StepBattery({
           {data.include && (
             <>
               <Field label="Capacity" hint="kWh usable">
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min="5"
-                    max="40"
-                    step="2.5"
-                    value={data.capacity}
-                    onChange={(e) =>
-                      setData({ capacity: parseFloat(e.target.value) })
-                    }
-                    aria-label="Battery capacity in kilowatt-hours"
-                    className="flex-1 accent-accent"
-                  />
-                  <div className="min-w-[110px] text-right font-display text-[28px] tabular-nums">
-                    {data.capacity}{" "}
-                    <span className="font-mono text-[13px] text-ink-dim">
-                      kWh
-                    </span>
-                  </div>
-                </div>
+                <Slider
+                  min={5}
+                  max={40}
+                  step={2.5}
+                  value={data.capacity}
+                  onChange={(v) => setData({ capacity: v })}
+                  display={String(data.capacity)}
+                  unit="kWh"
+                  ariaLabel="Battery capacity in kilowatt-hours"
+                  readoutSize={28}
+                />
               </Field>
               <Field label="Dispatch strategy">
                 <SegBtn

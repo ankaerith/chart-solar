@@ -31,13 +31,8 @@ const SAMPLE_PROFILE: MonthDatum[] = [
   { month: "D", gen: 0, use: 990 },
 ];
 
-// Step 2 — Usage. Three-method input (Green Button OAuth, PDF upload,
-// manual entry) with a right-hand load-profile preview. Manual is the
-// only fully-wired path for v1; the OAuth and PDF panels render their
-// editorial frames + CTAs but don't yet connect to backends.
-//
-// Visual contract: design/solar-decisions/project/screen-wizard.jsx
-// :StepUsage (lines 134–235).
+// design ref · screen-wizard.jsx:StepUsage (134–235)
+// Manual is the only wired path; Green Button + PDF render frames only.
 
 export function StepUsage({
   data,

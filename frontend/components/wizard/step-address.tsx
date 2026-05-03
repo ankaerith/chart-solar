@@ -13,14 +13,9 @@ const HOLD_OPTIONS = [
   { value: "25" as const, label: "Lifetime" },
 ];
 
-// Step 1 — Address. Single TextInput for the street address; on
-// resolve the right Panel fills with detected utility, climate zone,
-// and net-metering status. The right-hand values are stubbed (the real
-// geocoder lives behind a later bead) but the shape mirrors what the
-// engine will return so call sites remain stable.
-//
-// Visual contract: design/solar-decisions/project/screen-wizard.jsx
-// :StepAddress (lines 73–120).
+// design ref · screen-wizard.jsx:StepAddress (73–120)
+// Detect column is stubbed — real geocoder integration is gated on
+// chart-solar-h8s + chart-solar-qnbk (Place ID storage).
 
 export function StepAddress({
   data,

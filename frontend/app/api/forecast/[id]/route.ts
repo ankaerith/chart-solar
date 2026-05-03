@@ -2,15 +2,9 @@ import { NextResponse } from "next/server";
 import { DEFAULT_WIZARD_STATE } from "@/components/wizard";
 import { buildMockResult } from "@/lib/api/forecast";
 
-// GET /api/forecast/[id] — placeholder lookup that returns a default
-// mock result so the result page survives a hard refresh. The real
-// engine (chart-solar-zyf / -bqq) reads the persisted job + inputs.
-//
-// In the mock world there's no server-side store, so we return a
-// fixture derived from DEFAULT_WIZARD_STATE and tag it with the
-// requested id. Practical effect: whoever first runs the wizard sees
-// their numbers (sessionStorage on the client); a refresh later falls
-// back to the defaults rather than 404'ing.
+// Refresh-survival fallback — no server-side store yet, so a refresh
+// after submit falls back to DEFAULT_WIZARD_STATE numbers tagged with
+// the requested id. The real engine (chart-solar-zyf) replaces this.
 
 export const dynamic = "force-dynamic";
 

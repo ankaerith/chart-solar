@@ -4,17 +4,9 @@ import type { KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 import { STEPS, type StepKey } from "./wizard-state";
 
-// Stepper — top-of-wizard step indicator. Five segments, each one of
-// {done, active, inactive}. Done segments are click-to-jump (only
-// backwards — moving forward requires completing the active step).
-//
-// Visual contract: design/solar-decisions/project/screen-wizard.jsx:13
-// (Stepper). Active segment gets the panel surface and an accent step
-// number; done steps get ✓ + accent color; inactive steps render at
-// reduced opacity.
-//
-// Accessibility: the row exposes ARIA tab semantics so a screen reader
-// reads "Step 02, Usage, current" rather than only the visual cue.
+// design ref · screen-wizard.jsx:Stepper (13)
+// Click-to-jump is backwards-only; forward navigation requires
+// completing the active step's validators.
 
 export function Stepper({
   index,

@@ -10,17 +10,13 @@ import { StepFinance } from "./step-finance";
 import { StepRoof } from "./step-roof";
 import { StepUsage } from "./step-usage";
 import { Stepper } from "./stepper";
-import { DEFAULT_WIZARD_STATE, type WizardState } from "./wizard-state";
+import {
+  DEFAULT_WIZARD_STATE,
+  STEPS,
+  type WizardState,
+} from "./wizard-state";
 
-// WizardShell — orchestrates the 5-step Explore flow. Owns wizard
-// state, the active step index, and the submit-to-mock-forecast wiring
-// that hands off to /forecast/[id].
-//
-// Anonymous-friendly: state is in memory only, scoped to the route.
-// Persistence (localStorage → Postgres on sign-in) is filed under the
-// auth epic (chart-solar-4tz) and lands separately.
-
-type WizardKey = keyof WizardState;
+const LAST_STEP = STEPS.length - 1;
 
 export function WizardShell() {
   const router = useRouter();
@@ -29,25 +25,46 @@ export function WizardShell() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const patch = useCallback(
-    <K extends WizardKey>(key: K) =>
-      (next: Partial<WizardState[K]>) => {
-        setState((prev) => ({ ...prev, [key]: { ...prev[key], ...next } }));
-      },
+  // One stable patcher per step key so step components don't see a new
+  // setData callback on every WizardShell render — opens the door to
+  // React.memo on individual steps later.
+  const patchAddress = useCallback(
+    (next: Partial<WizardState["address"]>) =>
+      setState((prev) => ({ ...prev, address: { ...prev.address, ...next } })),
+    [],
+  );
+  const patchUsage = useCallback(
+    (next: Partial<WizardState["usage"]>) =>
+      setState((prev) => ({ ...prev, usage: { ...prev.usage, ...next } })),
+    [],
+  );
+  const patchRoof = useCallback(
+    (next: Partial<WizardState["roof"]>) =>
+      setState((prev) => ({ ...prev, roof: { ...prev.roof, ...next } })),
+    [],
+  );
+  const patchBattery = useCallback(
+    (next: Partial<WizardState["battery"]>) =>
+      setState((prev) => ({ ...prev, battery: { ...prev.battery, ...next } })),
+    [],
+  );
+  const patchFinance = useCallback(
+    (next: Partial<WizardState["finance"]>) =>
+      setState((prev) => ({ ...prev, finance: { ...prev.finance, ...next } })),
     [],
   );
 
   const back = () => {
     if (index > 0) {
-      setIndex(index - 1);
+      setIndex((i) => i - 1);
     } else {
       router.push("/");
     }
   };
 
   const next = () => {
-    if (index < 4) {
-      setIndex(index + 1);
+    if (index < LAST_STEP) {
+      setIndex((i) => i + 1);
       return;
     }
     void submit();
@@ -100,7 +117,7 @@ export function WizardShell() {
       {index === 0 && (
         <StepAddress
           data={state.address}
-          setData={patch("address")}
+          setData={patchAddress}
           onBack={back}
           onNext={next}
         />
@@ -108,7 +125,7 @@ export function WizardShell() {
       {index === 1 && (
         <StepUsage
           data={state.usage}
-          setData={patch("usage")}
+          setData={patchUsage}
           onBack={back}
           onNext={next}
         />
@@ -116,7 +133,7 @@ export function WizardShell() {
       {index === 2 && (
         <StepRoof
           data={state.roof}
-          setData={patch("roof")}
+          setData={patchRoof}
           usage={state.usage}
           onBack={back}
           onNext={next}
@@ -125,19 +142,19 @@ export function WizardShell() {
       {index === 3 && (
         <StepBattery
           data={state.battery}
-          setData={patch("battery")}
+          setData={patchBattery}
           onBack={back}
           onNext={next}
           onSkip={() => {
-            patch("battery")({ include: false });
-            setIndex(4);
+            patchBattery({ include: false });
+            setIndex(LAST_STEP);
           }}
         />
       )}
       {index === 4 && (
         <StepFinance
           data={state.finance}
-          setData={patch("finance")}
+          setData={patchFinance}
           onBack={back}
           onNext={next}
           isSubmitting={submitting}
