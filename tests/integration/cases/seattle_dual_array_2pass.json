@@ -30,7 +30,7 @@
     "production": {
       "source": "pvwatts_v8",
       "endpoint": "https://developer.nlr.gov/api/pvwatts/v8.json",
-      "fetched_at": "2026-05-02T20:31:02.491573Z",
+      "fetched_at": "2026-05-03T00:18:54.633505Z",
       "requests": [
         {
           "lat": 47.45,

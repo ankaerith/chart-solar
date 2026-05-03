@@ -135,8 +135,6 @@ class PvgisProductionOracle(BaseModel):
     responses: list[PvgisPvcalcResponseSlice] = Field(..., min_length=1)
 
 
-#: Discriminated union over production-oracle sources. Pydantic 2 picks
-#: the variant from the ``source`` field automatically when loading.
 ProductionOracle = PvwattsProductionOracle | PvgisProductionOracle
 
 
