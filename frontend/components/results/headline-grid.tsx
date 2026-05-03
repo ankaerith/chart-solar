@@ -3,12 +3,7 @@ import { Currency, Num } from "@/lib/intl";
 import { cn } from "@/lib/utils";
 import type { ForecastResultMock } from "@/lib/api/forecast";
 
-// 6-tile headline grid. Median NPV is the accent-color tile; the rest
-// share the bg surface. Sub-captions are mono small caps with consistent
-// truncation so the row doesn't get pushed by a long currency span.
-//
-// Visual contract: design/solar-decisions/project/screen-results.jsx
-// :HeadlineGrid (lines 40–75).
+// design ref · screen-results.jsx:HeadlineGrid (40–75)
 
 type Tile = {
   kicker: string;

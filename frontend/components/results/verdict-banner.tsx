@@ -1,31 +1,10 @@
 import { cn } from "@/lib/utils";
+import { toneBg, toneBorder, toneText } from "@/lib/tone";
 import type { Verdict } from "@/lib/api/forecast";
 
-// Verdict banner — lens-aware, balanced-read summary at the top of the
-// Results screen. The tone glyph (✓ vs ~) and tone color reflect the
-// engine's verdict; the phrasing is intentionally non-imperative
-// ("likely wins", "leans no") per the BUSINESS_PLAN.md ethics red-team.
-//
-// Visual contract: design/solar-decisions/project/screen-results.jsx
-// :VerdictBanner (lines 5–38).
-
-const TONE_TEXT: Record<Verdict["tone"], string> = {
-  good: "text-good",
-  warn: "text-warn",
-  bad: "text-bad",
-};
-
-const TONE_BG: Record<Verdict["tone"], string> = {
-  good: "bg-good",
-  warn: "bg-warn",
-  bad: "bg-bad",
-};
-
-const TONE_BORDER: Record<Verdict["tone"], string> = {
-  good: "border-good",
-  warn: "border-warn",
-  bad: "border-bad",
-};
+// design ref · screen-results.jsx:VerdictBanner (5–38)
+// Phrasing is intentionally non-imperative ("likely wins", "leans no")
+// per the BUSINESS_PLAN.md ethics red-team.
 
 export function VerdictBanner({ verdict }: { verdict: Verdict }) {
   const glyph = verdict.tone === "good" ? "✓" : "~";
@@ -36,12 +15,12 @@ export function VerdictBanner({ verdict }: { verdict: Verdict }) {
           <div
             className={cn(
               "mb-4 flex items-center gap-[10px] font-mono text-[11px] uppercase tracking-[0.18em]",
-              TONE_TEXT[verdict.tone],
+              toneText(verdict.tone),
             )}
           >
             <span
               aria-hidden="true"
-              className={cn("inline-block h-px w-6", TONE_BG[verdict.tone])}
+              className={cn("inline-block h-px w-6", toneBg(verdict.tone))}
             />
             Verdict · {verdict.label}
           </div>
@@ -56,8 +35,8 @@ export function VerdictBanner({ verdict }: { verdict: Verdict }) {
           aria-hidden="true"
           className={cn(
             "flex h-[90px] w-[90px] items-center justify-center rounded-full border-2 font-display text-[36px] font-bold",
-            TONE_BORDER[verdict.tone],
-            TONE_TEXT[verdict.tone],
+            toneBorder(verdict.tone),
+            toneText(verdict.tone),
           )}
         >
           {glyph}

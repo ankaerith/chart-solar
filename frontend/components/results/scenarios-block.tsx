@@ -10,15 +10,8 @@ import type {
   ScenarioPaths,
 } from "@/lib/api/forecast";
 
-// Cumulative-net-wealth fan chart with cash / loan / lease scenario
-// chips. Same Recharts component as the landing hero, fed real Monte
-// Carlo P10 / P50 / P90 paths per scenario. The chip switch swaps the
-// active dataset; chart axes stay pinned across switches so visual
-// comparison is honest.
-//
-// Visual contract: design/solar-decisions/project/screen-results.jsx
-// :ScenariosBlock (lines 125–150) + the inline Recharts area inside
-// ScreenResults (376–398).
+// design ref · screen-results.jsx:ScenariosBlock (125–150) + ScreenResults inline area (376–398)
+// Chart axes stay pinned across chip switches so visual comparison is honest.
 
 const CHIP_LABELS: Record<FinancingScenario, string> = {
   cash: "cash",
@@ -33,11 +26,12 @@ export function ScenariosBlock({
   scenarios: ReadonlyArray<ScenarioPaths>;
   simulations: number;
 }) {
-  const initial: FinancingScenario =
-    scenarios.find((s) => s.method === "cash")?.method ??
-    scenarios[0]?.method ??
-    "cash";
-  const [active, setActive] = useState<FinancingScenario>(initial);
+  const [active, setActive] = useState<FinancingScenario>(
+    () =>
+      scenarios.find((s) => s.method === "cash")?.method ??
+      scenarios[0]?.method ??
+      "cash",
+  );
   const current =
     scenarios.find((s) => s.method === active) ?? scenarios[0];
 

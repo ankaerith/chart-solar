@@ -1,8 +1,5 @@
-// Mock forecast client — POSTs the wizard's WizardState to the local
-// `/api/forecast` Next route, which returns a deterministic mock id.
-// `getMockForecast(id)` reads the same hardcoded fixture back. Once
-// the real engine endpoint lands (chart-solar-bqq), this module's
-// surface stays — only the path changes — so call sites don't churn.
+// Mock forecast client. Real engine endpoint swap (chart-solar-bqq)
+// keeps this module's surface; only the transport changes.
 
 import { demoHeroData, type HeroDatum } from "@/components/charts";
 import type { WizardState } from "@/components/wizard";
@@ -56,7 +53,7 @@ export type ForecastResultMock = {
     coveragePct: number;
   };
   verdict: Verdict;
-  scenarios: ScenarioPaths[];
+  scenarios: ReadonlyArray<ScenarioPaths>;
   caveats: ReadonlyArray<Caveat>;
   // Tier the result was generated against. The real engine writes
   // this from the user's entitlement at request time; the mock stays
@@ -141,23 +138,29 @@ const CAVEATS: ReadonlyArray<Caveat> = [
   },
 ];
 
-// Hardcoded headline + scenario fixture — illustrative numbers that
-// match the editorial copy (median NPV ≈ thirty-one-thousand-four-
-// hundred, an eight-year payback, etc.). The real engine output will
-// overwrite this once chart-solar-bqq lands.
+// Three Monte-Carlo runs feeding the scenario chips. Independent of
+// the wizard inputs, so cached at module scope — saves ~2k operations
+// per mock-result build.
+const SCENARIO_PATHS = {
+  cash: demoHeroData({ seed: 42, upfront: -28000, altRate: 0.045 }),
+  loan: demoHeroData({ seed: 51, upfront: -2000, altRate: 0.055 }),
+  lease: demoHeroData({ seed: 64, upfront: 0, altRate: 0.029 }),
+} as const;
+
+const finalP50 = (paths: HeroDatum[]) => paths[paths.length - 1].p50;
+
+const SCENARIOS = [
+  { method: "cash", paths: SCENARIO_PATHS.cash, npv: finalP50(SCENARIO_PATHS.cash) },
+  { method: "loan", paths: SCENARIO_PATHS.loan, npv: finalP50(SCENARIO_PATHS.loan) },
+  { method: "lease", paths: SCENARIO_PATHS.lease, npv: finalP50(SCENARIO_PATHS.lease) },
+] as const satisfies ReadonlyArray<ScenarioPaths>;
+
+// Editorial headline copy — illustrative numbers matching the design
+// source. Real engine output replaces these once chart-solar-bqq lands.
 export function buildMockResult(inputs: WizardState): ForecastResultMock {
   const annualKwh = Math.round(inputs.roof.size * 1450);
   const coveragePct =
     inputs.usage.kwh > 0 ? Math.round((annualKwh / inputs.usage.kwh) * 100) : 0;
-
-  // Three deterministic Monte-Carlo runs feed the scenario chips —
-  // same shape, different upfront and yield assumptions per financing
-  // wrapper. The seeded PRNG keeps them reproducible.
-  const cashPaths = demoHeroData({ seed: 42, upfront: -28000, altRate: 0.045 });
-  const loanPaths = demoHeroData({ seed: 51, upfront: -2000, altRate: 0.055 });
-  const leasePaths = demoHeroData({ seed: 64, upfront: 0, altRate: 0.029 });
-
-  const final = (paths: HeroDatum[]) => paths[paths.length - 1].p50;
 
   return {
     id: deriveMockForecastId(inputs),
@@ -180,11 +183,7 @@ export function buildMockResult(inputs: WizardState): ForecastResultMock {
       body: "Median NPV is positive over 25 years at your discount rate; crossover with the grid happens in year 9. Even at 3% rate escalation you stay net-positive in the 80% band. Battery sizing trims financial upside but adds typical-load backup.",
       tone: "good",
     },
-    scenarios: [
-      { method: "cash", paths: cashPaths, npv: final(cashPaths) },
-      { method: "loan", paths: loanPaths, npv: final(loanPaths) },
-      { method: "lease", paths: leasePaths, npv: final(leasePaths) },
-    ],
+    scenarios: SCENARIOS,
     caveats: CAVEATS,
     tier: "free",
     creditsAudit: 0,

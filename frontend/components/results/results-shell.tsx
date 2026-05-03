@@ -8,20 +8,9 @@ import { SectionHead } from "./section-head";
 import { VerdictBanner } from "./verdict-banner";
 import { WorkshopTeaser } from "./workshop-teaser";
 
-// ResultsShell — composes the full /forecast/[id] surface. Order
-// matches the editorial flow in the design source:
-//
-//   1. Hero kicker + display headline ("25 years, 500 paths…")
-//   2. Cumulative-net-wealth fan chart with cash/loan/lease chips
-//   3. Headline grid (six tiles)
-//   4. Verdict banner (lens-aware)
-//   5. Workshop teaser (free-tier only)  OR  scenarios + sensitivity
-//      panels (Decision Pack tier — P2, follow-up)
-//   6. Caveats block (KNOWN / PARTIAL / UNKNOWN)
-//   7. Next-steps row (Audit primary · Save · Track-coming-soon)
-//
-// Visual contract: design/solar-decisions/project/screen-results.jsx
-// :ScreenResults (lines 347–449).
+// design ref · screen-results.jsx:ScreenResults (347–449)
+// Free tier sees the workshop teaser; Pack/Founders see scenarios +
+// sensitivity panels (P2, follow-up to chart-solar-hv7).
 
 const SIM_COUNT_FREE = 50;
 const SIM_COUNT_PACK = 500;

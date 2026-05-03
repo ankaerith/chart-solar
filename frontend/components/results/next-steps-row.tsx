@@ -1,16 +1,12 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { Arrow } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import type { ResultTier } from "@/lib/api/forecast";
 
-// Three-card next-steps row. The Audit card is the primary action
-// (dark ink panel) and gates by audit-credit availability — when the
-// user has credits, it deducts; otherwise it routes through checkout.
-// The Save card depends on tier (free is locked behind Decision
-// Pack). The Track card is a coming-soon waitlist row.
-//
-// Visual contract: design/solar-decisions/project/screen-results.jsx
-// :NextStepsRow + :NextStepRow + :ComingSoonRow (lines 204–294).
+// design ref · screen-results.jsx:NextStepsRow + NextStepRow + ComingSoonRow (204–294)
+// Audit card gates by audit-credit availability (chart-solar-6nx);
+// Save card gates on Decision Pack tier; Track is a waitlist row.
 
 function NextStepCard({
   kicker,
@@ -70,7 +66,7 @@ function NextStepCard({
           {locked && <span aria-hidden="true">🔒 </span>}
           {cta}
         </span>
-        <span aria-hidden="true">→</span>
+        <Arrow />
       </div>
     </Link>
   );
@@ -103,10 +99,26 @@ function ComingSoonCard({
       </div>
       <div className="mt-1 flex items-center justify-between border-t border-dashed border-rule pt-3 text-[13px] font-medium text-ink-dim">
         <span>{cta}</span>
-        <span aria-hidden="true">→</span>
+        <Arrow />
       </div>
     </div>
   );
+}
+
+function auditCopy(creditsAudit: number) {
+  if (creditsAudit > 0) {
+    const plural = creditsAudit > 1 ? "s" : "";
+    return {
+      kicker: `${creditsAudit} audit credit${plural} available`,
+      title: "Audit a quote — credit ready",
+      cta: `Use audit credit (${creditsAudit} left)`,
+    };
+  }
+  return {
+    kicker: "check the proposal",
+    title: "Audit a quote",
+    cta: "Run an audit",
+  };
 }
 
 export function NextStepsRow({
@@ -116,26 +128,16 @@ export function NextStepsRow({
   tier: ResultTier;
   creditsAudit: number;
 }) {
-  const auditKicker =
-    creditsAudit > 0
-      ? `${creditsAudit} audit credit${creditsAudit > 1 ? "s" : ""} available`
-      : "check the proposal";
-  const auditTitle =
-    creditsAudit > 0
-      ? "Audit a quote — credit ready"
-      : "Audit a quote";
-  const auditCta =
-    creditsAudit > 0
-      ? `Use audit credit (${creditsAudit} left)`
-      : "Run an audit";
+  const audit = auditCopy(creditsAudit);
+  const isFree = tier === "free";
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
       <NextStepCard
-        kicker={auditKicker}
-        title={auditTitle}
+        kicker={audit.kicker}
+        title={audit.title}
         body="Drop your installer's PDF. We diff their year-1 kWh, escalator, dealer fee, and DC:AC ratio against this baseline and produce a one-page variance report + an ask-your-installer question list."
-        cta={auditCta}
+        cta={audit.cta}
         href="/audit"
         primary
       />
@@ -143,13 +145,13 @@ export function NextStepsRow({
         kicker="lock these numbers"
         title="Save & methodology PDF"
         body={
-          tier === "free"
+          isFree
             ? "Save this forecast and export the methodology PDF — every assumption, every source. Decision Pack required."
             : "Save this forecast (engine + irradiance + tariff hash are pinned). Export the methodology PDF."
         }
-        cta={tier === "free" ? "Decision Pack" : "Save & export"}
-        href={tier === "free" ? "/checkout" : "/save-forecast"}
-        locked={tier === "free"}
+        cta={isFree ? "Decision Pack" : "Save & export"}
+        href={isFree ? "/checkout" : "/save-forecast"}
+        locked={isFree}
       />
       <ComingSoonCard
         kicker="coming soon"

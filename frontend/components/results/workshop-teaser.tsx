@@ -5,31 +5,14 @@ import { Arrow, Icon } from "@/components/icons";
 import { Btn, DemoWatermark, Modal, MonoLabel } from "@/components/ui";
 import { Currency } from "@/lib/intl";
 import { cn } from "@/lib/utils";
+import { DECISION_PACK_PRICE_USD } from "@/lib/pricing";
 
-// Decision Pack price — central constant so the eventual Stripe-driven
-// catalog (chart-solar-79i) only has one place to swap.
-const DECISION_PACK_PRICE_USD = 79;
-
-// Workshop teaser — single consolidated paywall surface for the free
-// tier. Replaces three separate per-section gates that all said the
-// same thing. Six-tool inventory with a Preview button per tool that
-// opens a sample-data modal under a DemoWatermark, and one tied CTA
-// (Decision Pack tier).
-//
-// Visual contract: design/solar-decisions/project/tiers.jsx
-// :WorkshopTeaser (lines 227–386).
-
-type ToolKind =
-  | "capital"
-  | "tornado"
-  | "battery"
-  | "sale"
-  | "audit"
-  | "methodology";
+// design ref · tiers.jsx:WorkshopTeaser (227–386)
+// Single consolidated paywall — replaces three earlier per-section
+// gates that all said the same thing.
 
 type Tool = {
   kicker: string;
-  kind: ToolKind;
   title: string;
   sub: string;
   v: string;
@@ -38,42 +21,36 @@ type Tool = {
 const TOOLS: ReadonlyArray<Tool> = [
   {
     kicker: "capital allocation",
-    kind: "capital",
     title: "Compare solar vs your other capital options",
     sub: "Solar isn't free; the question is whether it beats HYSA, mortgage paydown, and the index fund — over 25 years.",
     v: "Compare solar vs HYSA, mortgage paydown, S&P 500 — the do-something-else baselines installer tools never show.",
   },
   {
     kicker: "tornado sensitivity",
-    kind: "tornado",
     title: "Which assumption actually moves your NPV",
     sub: "Rank-ordered, dollar-weighted impact on median NPV. Tells you which knob to actually argue about.",
     v: "Which assumption actually moves your NPV. Rank-ordered, dollar-weighted.",
   },
   {
     kicker: "battery dispatch · 8760",
-    kind: "battery",
     title: "Hour-by-hour battery dispatch",
     sub: "8,760-hour simulation. Charge off-peak, discharge at peak. NEM 3.0 / NBT and TOU arbitrage modeled.",
     v: "Hour-by-hour charge/discharge under your tariff. NEM 3.0 + TOU arbitrage modeled.",
   },
   {
     kicker: "sale-scenario",
-    kind: "sale",
     title: "What happens if you sell in year X",
     sub: "Probability-weighted across hold duration. Solar home-value uplift, remaining loan, buyer-market conditions.",
     v: "Probability-weighted across hold duration. Solar home-value uplift, remaining loan, buyer market.",
   },
   {
     kicker: "proposal audit",
-    kind: "audit",
     title: "Audit a real installer proposal",
     sub: "Drop a PDF. We extract every field, diff their year-1 kWh, escalator, dealer fee, and DC:AC against this baseline. One credit included.",
     v: "Drop the installer's PDF. Variance report + ask-your-installer questions. 1 credit included.",
   },
   {
     kicker: "methodology PDF + share",
-    kind: "methodology",
     title: "Every assumption, every source — pinned",
     sub: "Engine version, irradiance source, tariff-table hash. Re-open the audit in 2030 and the numbers don't silently drift.",
     v: "Every assumption, every source. Reproducible — engine + irradiance + tariff hash pinned.",
@@ -120,7 +97,7 @@ export function WorkshopTeaser() {
           <div className="mt-3.5 grid grid-cols-1 gap-x-6 sm:grid-cols-2">
             {TOOLS.map((t, i) => (
               <div
-                key={t.kind}
+                key={t.kicker}
                 className={cn(
                   "flex flex-col gap-1.5 py-3",
                   i < TOOLS.length - (i % 2 === 0 ? 1 : 2) &&

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   Area,
   CartesianGrid,
@@ -36,10 +37,10 @@ export function HeroChart({
   // Recharts Area with `dataKey` returning [low, high] renders a range band.
   // We synthesise it by mapping each datum to a tuple range [p10, p90].
   const mounted = useHasMounted();
-  const ranged = data.map((d) => ({
-    ...d,
-    band: [d.p10, d.p90] as [number, number],
-  }));
+  const ranged = useMemo(
+    () => data.map((d) => ({ ...d, band: [d.p10, d.p90] as [number, number] })),
+    [data],
+  );
 
   return (
     <div
