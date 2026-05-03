@@ -1,22 +1,10 @@
 import { Arrow } from "@/components/icons";
 import { BtnLink, Eyebrow } from "@/components/ui";
 import { Currency } from "@/lib/intl";
+import { AUDIT_PRICE_USD } from "@/lib/pricing";
 import { HeroPanel } from "./hero-panel";
 
-// Audit pricing — kept inline for now; the eventual Stripe-driven
-// catalog (chart-solar-79i) consolidates this into one constants
-// module with currency-aware formatting per locale.
-const AUDIT_PRICE_USD = 79;
-
-// Hero — landing's first fold. Two-column at lg: editorial display
-// headline + dual CTA on the left, sample HeroPanel on the right.
-// Stacks at narrow widths so the chart never disappears.
-//
-// Visual contract: design/solar-decisions/project/screen-landing.jsx
-// :Hero (lines 88–125). Note: the design's earlier ValueLensNote was
-// removed before handoff — bead chart-solar-4ef explicitly scopes
-// hero to headline + body + CTAs + HeroPanel only.
-
+// design ref · screen-landing.jsx:Hero (88–125)
 export function Hero() {
   return (
     <section className="mx-auto grid max-w-[1360px] grid-cols-1 items-center gap-12 px-10 pt-16 pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">

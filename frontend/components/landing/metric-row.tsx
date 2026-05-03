@@ -2,13 +2,7 @@ import type { ReactNode } from "react";
 import { MonoLabel } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
-// MetricRow — left/right pair used inside HeroPanel. Six rows split
-// across two columns; the "Median NPV" row gets the accent color and
-// is the only display-color tile in the panel.
-//
-// Visual contract: design/solar-decisions/project/screen-landing.jsx
-// :MetricRow (lines 41–58).
-
+// design ref · screen-landing.jsx:MetricRow (41–58)
 export function MetricRow({
   label,
   value,

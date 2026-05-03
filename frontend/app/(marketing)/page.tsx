@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
 import { Hero, MathRow, ModesStrip } from "@/components/landing";
 
-// Landing — the public homepage. Hero + modes strip + math row.
-// SEO surface, server-rendered through the (marketing) layout (which
-// adds NavBar + Footer + SunBackdrop chrome).
-//
-// Visual contract: design/solar-decisions/project/screen-landing.jsx
-// :ScreenLanding (lines 210–222).
+// design ref · screen-landing.jsx:ScreenLanding (210–222)
 
 export const metadata: Metadata = {
   title: "Chart Solar — the honest math for your roof",

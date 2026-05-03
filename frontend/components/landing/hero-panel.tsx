@@ -6,18 +6,12 @@ import { MonoLabel, Panel } from "@/components/ui";
 import { Currency } from "@/lib/intl";
 import { MetricRow } from "./metric-row";
 
-// HeroPanel — sample-household preview Panel sitting in the right
-// column of the hero. Editorial kicker + display title, Recharts fan
-// chart, and a 6-row metric split (median NPV gets the accent color).
+// design ref · screen-landing.jsx:HeroPanel (7–39)
 //
-// Visual contract: design/solar-decisions/project/screen-landing.jsx
-// :HeroPanel (lines 7–39).
-//
-// SSR friendliness: HeroChart is a client primitive that uses a
-// useHasMounted gate to avoid hydration mismatches on the recharts
-// ResponsiveContainer. The deterministic-seed SSR snapshot bead
-// (chart-solar-lsc.1) is P2 and lands in a follow-up; until then the
-// panel paints empty until hydration, then fills with the fan.
+// HeroChart relies on a useHasMounted gate to skip Recharts'
+// ResponsiveContainer during SSR — the panel paints empty until
+// hydration, then fills with the fan. The deterministic-seed SSR
+// snapshot (chart-solar-lsc.1) closes that gap.
 
 const SAMPLE_DATA = demoHeroData({
   years: 25,

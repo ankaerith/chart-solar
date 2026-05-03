@@ -1,15 +1,10 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { Arrow } from "@/components/icons";
 import { MonoLabel } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
-// ModeCard — one of three cards in the modes strip. Editorial card
-// with kicker + tag pill, display headline (accent on the primary
-// card), body, and a footer line of mono provenance text + ↓ glyph.
-//
-// Visual contract: design/solar-decisions/project/screen-landing.jsx
-// :ModeCard (lines 127–156).
-
+// design ref · screen-landing.jsx:ModeCard (127–156)
 export function ModeCard({
   index,
   name,
@@ -55,9 +50,7 @@ export function ModeCard({
       </p>
       <div className="flex items-center justify-between border-t border-rule pt-3.5 font-mono text-[11px] text-ink-dim">
         <span>{footer}</span>
-        <span className="text-accent" aria-hidden="true">
-          →
-        </span>
+        <Arrow className="text-accent" />
       </div>
     </Link>
   );
