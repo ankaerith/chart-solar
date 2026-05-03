@@ -1,0 +1,59 @@
+{
+  "name": "edinburgh_4kw_clear",
+  "description": "Edinburgh, Scotland — single-array 4 kW DC south at 35° tilt. Northern UK reference point (lat 56°N, ~5° north of London) for low-irradiance high-latitude validation. Engine via PVGIS (JRC SARAH-2/ERA5), oracle via JRC's PVcalc — the definitive European regional authority. Same-data-family check, so drift reflects pvlib-vs-PVcalc physics implementation differences, not cross-product noise.",
+  "inputs": {
+    "system": {
+      "lat": 55.9533,
+      "lon": -3.1883,
+      "dc_kw": 4.0,
+      "tilt_deg": 35.0,
+      "azimuth_deg": 180.0
+    },
+    "financial": {},
+    "tariff": {}
+  },
+  "inputs_arrays": null,
+  "oracle": {
+    "production": {
+      "source": "pvgis_pvcalc_v52",
+      "endpoint": "https://re.jrc.ec.europa.eu/api/v5_2/PVcalc",
+      "fetched_at": "2026-05-02T23:48:51.402851Z",
+      "requests": [
+        {
+          "lat": 55.9533,
+          "lon": -3.1883,
+          "peakpower_kw": 4.0,
+          "angle_deg": 35.0,
+          "aspect_deg": 0.0,
+          "loss_pct": 14.0
+        }
+      ],
+      "responses": [
+        {
+          "ac_annual_kwh": 3661.02,
+          "ac_monthly_kwh": [
+            112.5,
+            194.95,
+            316.35,
+            428.38,
+            495.49,
+            439.53,
+            451.88,
+            408.57,
+            337.95,
+            229.57,
+            155.26,
+            90.59
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "artifacts/engine.dc_production/annual_ac_kwh": {
+      "kind": "scalar",
+      "value": 3661.02,
+      "tol_pct": 10.0
+    }
+  }
+}

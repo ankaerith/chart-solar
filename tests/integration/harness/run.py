@@ -26,6 +26,7 @@ from typing import Any
 
 import httpx
 
+from .._env import load_dotenv
 from .case import Case, ScalarExpected, load_cases
 from .client import ForecastFailedError, ForecastTimeoutError, run_case
 from .compare import CaseReport, MetricResult, compare
@@ -42,25 +43,6 @@ DEFAULT_API_BASE_URL = "http://localhost:8000"
 #: finish in well under a minute for a single 8760-hour case; bumping
 #: to 120s leaves headroom for cold-start + Monte Carlo.
 DEFAULT_TIMEOUT_S = 120.0
-
-
-def _load_dotenv(path: Path) -> None:
-    """Minimal stdlib .env loader — process env wins over file values.
-
-    Avoids adding a python-dotenv dep when the file format is this
-    simple. Lines like ``KEY=value``; comments start with ``#``;
-    blank lines and quotes around values are tolerated.
-    """
-    if not path.exists():
-        return
-    for raw in path.read_text().splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
 
 
 def _format_report(report: CaseReport) -> str:
@@ -196,7 +178,7 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[3]
-    _load_dotenv(repo_root / ".env")
+    load_dotenv(repo_root / ".env")
 
     try:
         cases = load_cases(args.cases_dir, args.case)

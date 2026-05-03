@@ -1,0 +1,59 @@
+{
+  "name": "london_4kw_clear",
+  "description": "London, UK — single-array 4 kW DC south at 35° tilt (typical UK roof pitch). Validates the EU/UK provider path: engine routes to PVGIS (JRC SARAH-2/ERA5) and the oracle is JRC's own PVcalc — the definitive European regional authority. Same data product family on both sides, so drift here is real engine-vs-source variance, not cross-product noise. Tolerance is provisional ±10% pending chart-solar-gi58 (engine routing PVcalc); tightens to ±5% once the engine matches the source.",
+  "inputs": {
+    "system": {
+      "lat": 51.5074,
+      "lon": -0.1278,
+      "dc_kw": 4.0,
+      "tilt_deg": 35.0,
+      "azimuth_deg": 180.0
+    },
+    "financial": {},
+    "tariff": {}
+  },
+  "inputs_arrays": null,
+  "oracle": {
+    "production": {
+      "source": "pvgis_pvcalc_v52",
+      "endpoint": "https://re.jrc.ec.europa.eu/api/v5_2/PVcalc",
+      "fetched_at": "2026-05-02T23:48:50.418399Z",
+      "requests": [
+        {
+          "lat": 51.5074,
+          "lon": -0.1278,
+          "peakpower_kw": 4.0,
+          "angle_deg": 35.0,
+          "aspect_deg": 0.0,
+          "loss_pct": 14.0
+        }
+      ],
+      "responses": [
+        {
+          "ac_annual_kwh": 4100.03,
+          "ac_monthly_kwh": [
+            161.66,
+            211.18,
+            352.41,
+            460.28,
+            487.02,
+            490.15,
+            498.92,
+            440.29,
+            385.83,
+            270.77,
+            191.75,
+            149.78
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "artifacts/engine.dc_production/annual_ac_kwh": {
+      "kind": "scalar",
+      "value": 4100.03,
+      "tol_pct": 10.0
+    }
+  }
+}
