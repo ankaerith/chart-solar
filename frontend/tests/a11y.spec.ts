@@ -14,6 +14,7 @@ import { expect, test } from "@playwright/test";
 const ROUTES = [
   { path: "/", name: "landing" },
   { path: "/forecast", name: "wizard-step-1" },
+  { path: "/forecast/mock-1abc", name: "results" },
 ] as const;
 
 for (const { path, name } of ROUTES) {

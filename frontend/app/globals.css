@@ -28,7 +28,7 @@
 
   /* status */
   --good: #2e6b48;
-  --warn: #a86512;
+  --warn: #8a4d0c; /* darkened from the design's #a86512 to clear WCAG AA on bg-panel */
   --bad: #7a2826;
 
   /* type */
