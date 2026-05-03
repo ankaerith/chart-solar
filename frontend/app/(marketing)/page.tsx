@@ -1,61 +1,20 @@
-import { Eyebrow, Panel } from "@/components/ui";
-import { PageContainer } from "@/components/layout";
+import type { Metadata } from "next";
+import { Hero, MathRow, ModesStrip } from "@/components/landing";
 
-// Placeholder landing — the real Hero / mode-strip / pricing / etc. land in
-// later beads (chart-solar-4ef, sf7, …). For now, the page demonstrates the
-// marketing-route chrome (NavBar + SunBackdrop + Footer from the layout)
-// and surfaces the design-token preview that pre-existed on this route.
+// design ref · screen-landing.jsx:ScreenLanding (210–222)
+
+export const metadata: Metadata = {
+  title: "Chart Solar — the honest math for your roof",
+  description:
+    "Independent solar forecasting and proposal auditing. Hourly physics, Monte Carlo on rate paths, every alternative your capital could be doing instead. No installer affiliations, no lead-gen.",
+};
 
 export default function Home() {
   return (
-    <PageContainer className="space-y-10 py-16">
-      <header className="space-y-3">
-        <Eyebrow>Solstice · Ink</Eyebrow>
-        <h1 className="text-5xl">Chart Solar</h1>
-        <p className="max-w-2xl text-lg text-ink-dim">
-          Plan it. Check it. Track it. — the honest math for your roof, before,
-          during, and after.
-        </p>
-      </header>
-
-      <Panel className="space-y-4">
-        <p className="font-mono text-[11px] tracking-[0.18em] text-ink-dim uppercase">
-          Token preview
-        </p>
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          <Swatch name="bg" className="bg-bg" />
-          <Swatch name="panel" className="bg-panel" />
-          <Swatch name="ink" className="bg-ink" />
-          <Swatch name="accent" className="bg-accent" />
-          <Swatch name="accent-2" className="bg-accent-2" />
-          <Swatch name="rule" className="bg-rule" />
-          <Swatch name="good" className="bg-good" />
-          <Swatch name="warn" className="bg-warn" />
-          <Swatch name="bad" className="bg-bad" />
-        </div>
-        <p className="font-mono text-sm text-ink-dim">
-          $/W · 8,760h · NPV · IRR — numerics in IBM Plex Mono
-        </p>
-      </Panel>
-
-      <p className="text-sm text-ink-dim">
-        Phase 0: scaffold. See{" "}
-        <code className="font-mono">PRODUCT_PLAN.md</code> for what comes next.
-      </p>
-    </PageContainer>
-  );
-}
-
-function Swatch({ name, className }: { name: string; className: string }) {
-  // Label sits outside the coloured chip — keeps the demo accessible
-  // regardless of the swatch's contrast against text.
-  return (
-    <div className="flex flex-col gap-1">
-      <div
-        aria-hidden="true"
-        className={`h-12 rounded-md border border-rule ${className}`}
-      />
-      <span className="font-mono text-[11px] text-ink-2">{name}</span>
-    </div>
+    <>
+      <Hero />
+      <ModesStrip />
+      <MathRow />
+    </>
   );
 }
