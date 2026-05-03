@@ -53,7 +53,10 @@ export function SegBtn<T extends string = string>({
               <span
                 className={cn(
                   "font-mono text-[10px] tracking-[0.06em]",
-                  selected ? "text-bg/70" : "text-ink-faint",
+                  // Use ink-dim (not ink-faint) on the unselected state —
+                  // ink-faint vs bg-bg fails WCAG AA color-contrast for
+                  // small text. Selected state stays on the dark fill.
+                  selected ? "text-bg/80" : "text-ink-dim",
                 )}
               >
                 {sub}
